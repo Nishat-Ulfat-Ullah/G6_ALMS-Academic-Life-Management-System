@@ -5,6 +5,7 @@ import 'package:alms/pages/book_consultations.dart';
 import 'package:alms/pages/my_consultations.dart';
 import 'package:alms/pages/my_notes.dart';
 import 'package:alms/pages/settings_page.dart';
+import 'package:alms/pages/set_consultations.dart';
 import 'package:alms/pages/login.dart';
 import 'package:alms/pages/register.dart';
 
@@ -15,7 +16,6 @@ void main() {
 class ALMS extends StatelessWidget {
   const ALMS({super.key});
 
-  
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -26,12 +26,18 @@ class ALMS extends StatelessWidget {
         '/homepage' : (context) => HomePage(),
         '/settingspage' : (context) => SettingsPage(),
         '/mynotespage' : (context) => MyNotes(),
-        '/myconsultations' : (context) => MyConsultations(),
+        '/myconsultations': (context) {
+          final userId = ModalRoute.of(context)!.settings.arguments as String;
+          return MyConsultations(userId: userId);
+        },
         '/bookconsultations' : (context) => BookConsultations(),
+        '/set_consultations': (context) {
+          final userId = ModalRoute.of(context)!.settings.arguments as String;
+          return SetConsultations(currentUserID: userId);
+        },
         '/loginpage' : (context) => Loginpg(),
         '/registerpage' : (context) => RegisterPage(),
       },
-      
     );
   }
 }

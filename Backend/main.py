@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, field_validator
+from typing import Dict, List
 
 import mysql.connector
 import os
@@ -61,6 +62,9 @@ class SaveNote(BaseModel):
     user_id: str
     note_id: int
 
+class SaveRoutine(BaseModel):
+    provider_id: str
+    routine: Dict[str, List[str]]
 
 # ===================== HELPERS =====================
 def json_error(message: str, code: int = 400):
@@ -116,6 +120,86 @@ def login(user: LoginUser):
             }
         }
     except Exception as e:
+        return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+
+@app.get("/role/{user_id}")
+def check_role(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+
+        cursor.execute(
+            "SELECT f_id AS id, f_name AS name, f_initial AS initial, con_status AS con_status "
+            "FROM faculties WHERE f_id=%s",
+            (user_id,)
+        )
+        faculty = cursor.fetchone()
+        if faculty:
+            return {"success": True, "role": "faculty", "person": faculty}
+
+        cursor.execute(
+            "SELECT st_id AS id, st_name AS name, st_initial AS initial, st_con_status AS con_status "
+            "FROM student_tutors WHERE st_id=%s",
+            (user_id,)
+        )
+        tutor = cursor.fetchone()
+        if tutor:
+            return {"success": True, "role": "tutor", "person": tutor}
+
+        cursor.execute(
+            "SELECT user_id AS id, name AS name, email AS email "
+            "FROM users WHERE user_id=%s",
+            (user_id,)
+        )
+        student = cursor.fetchone()
+        if student:
+            return {"success": True, "role": "student", "person": student}
+
+        return {"success": False, "message": "User not found"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+# ===================== Consultations SYSTEM =====================
+
+@app.post("/save_routine")
+def save_routine(payload: SaveRoutine):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        
+        cursor.execute(
+            "DELETE FROM consultation_routines WHERE provider_id = %s AND is_booked = FALSE",
+            (payload.provider_id,)
+        )
+
+        insert_query = """
+            INSERT IGNORE INTO consultation_routines (provider_id, day_of_week, time_slot, is_booked)
+            VALUES (%s, %s, %s, FALSE)
+        """
+        
+        insert_data = []
+        for day, times in payload.routine.items():
+            for time_slot in times:
+                insert_data.append((payload.provider_id, day, time_slot))
+
+        if insert_data:
+            cursor.executemany(insert_query, insert_data)
+
+        db.commit()
+        return {"success": True, "message": "Routine saved successfully"}
+
+    except Exception as e:
+        if db: 
+            db.rollback() 
         return json_error(str(e))
     finally:
         if cursor: cursor.close()
