@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import 'package:alms/app_drawer.dart';
 
 class FirstPage extends StatelessWidget{
   const FirstPage({super.key});
@@ -8,39 +8,7 @@ class FirstPage extends StatelessWidget{
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(backgroundColor: const Color.fromARGB(255, 138, 201, 243), title: Text("First Page")),
-      drawer: Drawer(
-        child: Column(
-          children: [
-            DrawerHeader(child: 
-            Icon(
-              Icons.favorite,size: 48
-              )
-            ),
-            ListTile(
-              leading: Icon(Icons.home),
-              title: Text('H O M E'),
-              onTap: () {
-                Navigator.pushNamed(context, '/homepage');
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.settings),
-              title: Text('S E T T I N G S'),
-              onTap: (){
-                Navigator.pushNamed(context, '/settingspage');
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.book),
-              title: Text('MY NOTES'),
-              onTap: (){
-                Navigator.pushNamed(context, '/settingspage');
-              },
-            )
-
-          ],
-        ),
-      ),
+      drawer: AppDrawer(),
     );
   }
 }
