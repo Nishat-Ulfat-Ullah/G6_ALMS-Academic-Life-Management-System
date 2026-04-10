@@ -42,7 +42,7 @@ class _LoginpgState extends State<Loginpg> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => HomePage(studentId: studentId),
+            builder: (context) => HomePage(userId: studentId),
           ),
         );
       } else {

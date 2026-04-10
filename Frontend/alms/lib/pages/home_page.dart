@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:alms/pages/my_consultations.dart';
 
 class HomePage extends StatelessWidget {
-  final String? studentId;
+  final String? userId;
 
-  const HomePage({super.key, this.studentId});
+  const HomePage({super.key, this.userId});
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +40,10 @@ class HomePage extends StatelessWidget {
               leading: const Icon(Icons.timer),
               title: const Text('MY CONSULTATIONS'),
               onTap: () {
-                Navigator.pushNamed(context, '/myconsultations');
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (context) => MyConsultations(userId: userId!))
+                );
               },
             ),
             ListTile(
@@ -61,8 +65,8 @@ class HomePage extends StatelessWidget {
       ),
       body: Center(
         child: Text(
-          studentId != null
-              ? 'Welcome, $studentId'
+          userId != null
+              ? 'Welcome, $userId'
               : 'Welcome to Home Page',
           style: const TextStyle(fontSize: 20),
         ),
