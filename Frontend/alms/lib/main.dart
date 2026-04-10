@@ -7,7 +7,6 @@ import 'package:alms/pages/my_notes.dart';
 import 'package:alms/pages/settings_page.dart';
 //import 'package:alms/pages/login.dart';
 import 'package:alms/pages/register.dart';
-import 'package:animated_splash_screen/animated_splash_screen.dart';
 
 void main() {
   runApp(const ALMS());
