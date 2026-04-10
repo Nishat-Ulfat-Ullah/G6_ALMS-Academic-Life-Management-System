@@ -63,6 +63,9 @@ flutter:
     - assets/tdp.png
     - assets/bg.png
     - assets/almslogo.png
+    - assets/logo.png
+    - assets/light-1.png
+    - assets/clock.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
