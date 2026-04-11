@@ -213,6 +213,23 @@ def save_routine(payload: SaveRoutine):
 
  # ===================== Note System =====================
 
+import random
+
+def evaluate_note_ai(text: str):
+    """
+    Replace this with OpenAI later
+    For now: dummy AI scoring
+    """
+
+    return {
+        "score": random.randint(60, 95),
+        "completeness": random.randint(60, 95),
+        "keyword_coverage": random.randint(60, 95),
+        "clarity": random.randint(60, 95),
+        "formatting": random.randint(60, 95),
+        "feedback": "Good structure but needs more key definitions"
+    }
+
 @app.post("/api/notes/upload")
 async def upload_note(
     title: str = Form(...),
@@ -227,12 +244,17 @@ async def upload_note(
         with open(file_location, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
+        # ================= AI STEP =================
+        ai_result = evaluate_note_ai(description)
+
         db = get_db()
         cursor = db.cursor()
+
         cursor.execute("""
             INSERT INTO note 
-            (title, description, course, file_path, filename, file_size, uploaded_by)
-            VALUES (%s,%s,%s,%s,%s,%s,%s)
+            (title, description, course, file_path, filename, file_size, uploaded_by,
+             ai_score, completeness, keyword_coverage, clarity, formatting, feedback)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (
             title,
             description,
@@ -240,16 +262,29 @@ async def upload_note(
             file_location,
             file.filename,
             os.path.getsize(file_location),
-            uploader_id
+            uploader_id,
+
+            ai_result["score"],
+            ai_result["completeness"],
+            ai_result["keyword_coverage"],
+            ai_result["clarity"],
+            ai_result["formatting"],
+            ai_result["feedback"]
         ))
+
         db.commit()
-        return {"success": True, "message": "Note uploaded successfully"}
+
+        return {
+            "success": True,
+            "message": "Note uploaded + AI evaluated",
+            "ai_score": ai_result["score"]
+        }
+
     except Exception as e:
         return json_error(str(e))
     finally:
         if cursor: cursor.close()
         if db: db.close()
-
 
 @app.get("/api/notes/all")
 def get_all_notes():
@@ -269,6 +304,12 @@ def get_all_notes():
                 n.file_size,
                 n.uploaded_by,
                 n.created_at,
+                n.ai_score,
+                n.completeness,
+                n.keyword_coverage,
+                n.clarity,
+                n.formatting,
+                n.feedback,
                 u.name AS uploader_name
             FROM note n
             JOIN users u ON n.uploaded_by = u.user_id

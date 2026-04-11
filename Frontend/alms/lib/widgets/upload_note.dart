@@ -43,28 +43,48 @@ class _UploadNoteSheetState extends State<UploadNoteSheet> {
 
   Future<void> _upload() async {
     final uid = UserSession.userId;
-    if (uid == null) { _snack('Not logged in'); return; }
-    if (_titleCtrl.text.isEmpty || _courseCtrl.text.isEmpty || _file == null) {
+
+    if (uid == null) {
+      _snack('Not logged in');
+      return;
+    }
+
+    if (_titleCtrl.text.isEmpty ||
+        _courseCtrl.text.isEmpty ||
+        _file == null) {
       _snack('Please fill title, course and pick a file');
       return;
     }
 
     setState(() => _uploading = true);
+
     final req = http.MultipartRequest(
-        'POST', Uri.parse('http://$_host:8000/api/notes/upload'));
+      'POST',
+      Uri.parse('http://$_host:8000/api/notes/upload'),
+    );
+
     req.fields['title'] = _titleCtrl.text.trim();
     req.fields['description'] = _descCtrl.text.trim();
     req.fields['course'] = _courseCtrl.text.trim();
     req.fields['uploader_id'] = uid.toString();
-    req.files.add(await http.MultipartFile.fromPath('file', _file!.path));
+
+    req.files.add(
+      await http.MultipartFile.fromPath('file', _file!.path),
+    );
 
     try {
-      final res  = await http.Response.fromStream(await req.send());
+      final res = await http.Response.fromStream(await req.send());
       final data = jsonDecode(res.body);
+
       if (data['success'] == true) {
-        widget.onUploaded();
+        widget.onUploaded(); // refresh notes list
+
         if (mounted) Navigator.pop(context);
-        _snack('Note uploaded!');
+
+        _snack('Note uploaded successfully');
+
+        // ✅ OPTIONAL (DEBUG ONLY)
+        // print("AI Score: ${data['ai_score']}");
       } else {
         _snack(data['error'] ?? 'Upload failed');
       }

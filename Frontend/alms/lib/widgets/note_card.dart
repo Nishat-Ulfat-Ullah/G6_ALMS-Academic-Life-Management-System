@@ -37,6 +37,8 @@ class NoteCard extends StatelessWidget {
     final String filename = (note['filename'] ?? '') as String;
     final String filePath = (note['file_path'] ?? '') as String;
 
+    final int? aiScore = note['ai_score']; // ⭐ AI SCORE ADDED
+
     final String ext = _ext(filename);
     final Color color = _extColor(ext);
 
@@ -44,7 +46,7 @@ class NoteCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: () {
-        // TODO: open file viewer
+        // TODO: open file viewer or AI details later
       },
       child: Container(
         decoration: BoxDecoration(
@@ -62,7 +64,7 @@ class NoteCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ================= IMAGE  =================
+            // ================= IMAGE =================
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
@@ -83,7 +85,7 @@ class NoteCard extends StatelessWidget {
                               ),
                               child: Image.network(
                                 imageUrl,
-                                fit:BoxFit.contain,
+                                fit: BoxFit.contain,
                                 width: double.infinity,
                                 height: double.infinity,
                                 errorBuilder: (_, __, ___) =>
@@ -110,12 +112,7 @@ class NoteCard extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  filename.contains('.')
-                                      ? filename
-                                          .split('.')
-                                          .last
-                                          .toUpperCase()
-                                      : 'FILE',
+                                  ext,
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
@@ -147,6 +144,33 @@ class NoteCard extends StatelessWidget {
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+
+                    // ================= AI SCORE BADGE =================
+                    if (aiScore != null)
+                      Positioned(
+                        bottom: 6,
+                        right: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: aiScore >= 80
+                                ? Colors.green
+                                : aiScore >= 60
+                                    ? Colors.orange
+                                    : Colors.red,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            "AI: $aiScore",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
