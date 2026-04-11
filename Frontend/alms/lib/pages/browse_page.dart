@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:alms/app_drawer.dart';
+import 'package:alms/widgets/app_drawer.dart';
 
 class BrowseNotes extends StatefulWidget {
   const BrowseNotes({super.key});

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:alms/app_drawer.dart';
+import 'package:alms/widgets/app_drawer.dart';
+import 'package:alms/widgets/user_session.dart';
 
 class HomePage extends StatelessWidget {
   final String? userId;
@@ -8,12 +9,14 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    print("HomePage userId: $userId");
     return Scaffold(
+   
       appBar: AppBar(
         backgroundColor: const Color.fromARGB(255, 138, 201, 243),
         title: Text("Home Page"),
       ),
-      drawer: AppDrawer(userId: userId),
+      drawer: AppDrawer(),
       body: Center(
         child: Text(
           userId != null

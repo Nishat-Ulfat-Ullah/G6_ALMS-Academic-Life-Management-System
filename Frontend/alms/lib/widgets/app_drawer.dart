@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:alms/pages/my_consultations.dart';
+import 'package:alms/widgets/user_session.dart';
 
 class AppDrawer extends StatelessWidget {
   final String? userId;
@@ -18,11 +20,6 @@ class AppDrawer extends StatelessWidget {
             title: const Text('H O M E'),
             onTap: () => Navigator.pushNamed(context, '/homepage'),
           ),
-                    ListTile(
-            leading: const Icon(Icons.menu_book),
-            title: const Text('BROWSE NOTES'),
-            onTap: () => Navigator.pushNamed(context, '/browsenotes'),
-          ),
           ListTile(
             leading: const Icon(Icons.book),
             title: const Text('MY NOTES'),
@@ -31,7 +28,17 @@ class AppDrawer extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.timer),
             title: const Text('MY CONSULTATIONS'),
-            onTap: () => Navigator.pushNamed(context, '/myconsultations'),
+            onTap: () {
+      
+              if (UserSession.userId != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => MyConsultations(userId: UserSession.userId!),
+                  ),
+                );
+              }
+            },
           ),
           ListTile(
             leading: const Icon(Icons.timer),
@@ -39,11 +46,15 @@ class AppDrawer extends StatelessWidget {
             onTap: () => Navigator.pushNamed(context, '/bookconsultations'),
           ),
           ListTile(
+            leading: const Icon(Icons.menu_book),
+            title: const Text('BROWSE NOTES'),
+            onTap: () => Navigator.pushNamed(context, '/browsenotes'),
+          ),
+          ListTile(
             leading: const Icon(Icons.settings),
             title: const Text('S E T T I N G S'),
             onTap: () => Navigator.pushNamed(context, '/settingspage'),
           ),
-
         ],
       ),
     );

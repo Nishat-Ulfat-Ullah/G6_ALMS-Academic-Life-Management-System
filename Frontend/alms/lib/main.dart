@@ -24,7 +24,10 @@ class ALMS extends StatelessWidget {
       initialRoute: '/loginpage',
       routes: {
         '/firstpage' : (context) => FirstPage(),
-        '/homepage' : (context) => HomePage(),
+        '/homepage': (context) {
+          final userId = ModalRoute.of(context)?.settings.arguments as String?;
+          return HomePage(userId: userId);
+        },
         '/settingspage' : (context) => SettingsPage(),
         '/browsenotes': (context) => const BrowseNotes(),
         '/mynotespage' : (context) => MyNotes(),
