@@ -71,6 +71,10 @@ class SaveRoutine(BaseModel):
     provider_id: str
     routine: Dict[str, List[str]]
 
+class FocusSession(BaseModel):
+    user_id: str
+    duration_seconds: int
+
 # ===================== HELPERS =====================
 def json_error(message: str, code: int = 400):
     return JSONResponse(content={"success": False, "error": message}, status_code=code)
@@ -318,6 +322,29 @@ def get_all_notes():
 
         return {"success": True, "notes": cursor.fetchall()}
 
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+#focus mode session
+@app.post("/save_focus_session")
+def save_focus_session(session: FocusSession):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        
+        
+        cursor.execute(
+            "INSERT INTO focus_sessions (user_id, duration_seconds) VALUES (%s, %s)",
+            (session.user_id, session.duration_seconds)
+        )
+        db.commit()
+        return {"success": True, "message": "Focus session saved"}
+    except Exception as e:
+        if db: 
+            db.rollback()
+        return json_error(str(e))
     finally:
         if cursor: cursor.close()
         if db: db.close()

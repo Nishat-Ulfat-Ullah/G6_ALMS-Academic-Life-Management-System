@@ -1,1 +1,4 @@
 Backend/cse471_project/
+# Python cache files
+Backend/__pycache__/
+*.pyc
