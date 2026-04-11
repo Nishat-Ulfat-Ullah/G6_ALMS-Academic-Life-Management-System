@@ -18,7 +18,7 @@ class _BrowseNotesState extends State<BrowseNotes> {
   String _filter = 'All';
   String _search = '';
   List<Map<String, dynamic>> _notes = [];
-  Set<int> _saved = {};
+  final Set<int> _saved = {};
   bool _loading = true;
 
   final String _host = Platform.isAndroid ? '10.0.2.2' : '127.0.0.1';
