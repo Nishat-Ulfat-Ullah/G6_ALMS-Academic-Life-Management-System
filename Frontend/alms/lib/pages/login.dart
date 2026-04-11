@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:alms/pages/home_page.dart';
+import 'package:alms/widgets/user_session.dart';
 
 class Loginpg extends StatefulWidget {
   const Loginpg({super.key});
@@ -38,7 +39,7 @@ class _LoginpgState extends State<Loginpg> {
 
       if (response.statusCode == 200 && data["success"] == true) {
         String studentId = data["user"]["user_id"];
-
+        UserSession.userId = studentId;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:alms/widgets/app_drawer.dart';
 
 class MyConsultations extends StatefulWidget {
   final String userId;
@@ -120,52 +121,7 @@ class _MyConsultationsState extends State<MyConsultations> {
               ),
             ],
           ),
-          drawer: Drawer(
-            child: Column(
-              children: [
-                DrawerHeader(
-                  child: Icon(Icons.favorite, size: 48),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.home),
-                  title: const Text('H O M E'),
-                  onTap: () {
-                    Navigator.pushNamed(context, '/homepage',
-                        arguments: widget.userId);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.book),
-                  title: const Text('MY NOTES'),
-                  onTap: () {
-                    Navigator.pushNamed(context, '/mynotespage');
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.timer),
-                  title: const Text('MY CONSULTATIONS'),
-                  onTap: () {
-                    Navigator.pushNamed(context, '/myconsultations',
-                        arguments: widget.userId);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.timer),
-                  title: const Text('BOOK CONSULTATIONS'),
-                  onTap: () {
-                    Navigator.pushNamed(context, '/bookconsultations');
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.settings),
-                  title: const Text('S E T T I N G S'),
-                  onTap: () {
-                    Navigator.pushNamed(context, '/settingspage');
-                  },
-                )
-              ],
-            ),
-          ),
+          drawer: const AppDrawer(),
           body: Stack(
             children: [
               Positioned.fill(

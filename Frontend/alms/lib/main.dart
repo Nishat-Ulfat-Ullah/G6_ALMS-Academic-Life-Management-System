@@ -8,6 +8,7 @@ import 'package:alms/pages/settings_page.dart';
 import 'package:alms/pages/set_consultations.dart';
 import 'package:alms/pages/login.dart';
 import 'package:alms/pages/register.dart';
+import 'package:alms/pages/browse_page.dart';
 
 void main() {
   runApp(const ALMS());
@@ -23,8 +24,12 @@ class ALMS extends StatelessWidget {
       initialRoute: '/loginpage',
       routes: {
         '/firstpage' : (context) => FirstPage(),
-        '/homepage' : (context) => HomePage(),
+        '/homepage': (context) {
+          final userId = ModalRoute.of(context)?.settings.arguments as String?;
+          return HomePage(userId: userId);
+        },
         '/settingspage' : (context) => SettingsPage(),
+        '/browsenotes': (context) => const BrowseNotes(),
         '/mynotespage' : (context) => MyNotes(),
         '/myconsultations': (context) {
           final userId = ModalRoute.of(context)!.settings.arguments as String;
