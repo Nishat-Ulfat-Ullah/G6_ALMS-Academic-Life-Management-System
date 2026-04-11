@@ -10,8 +10,13 @@ import shutil
 import uvicorn
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
 app = FastAPI()
+
+
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -201,6 +206,118 @@ def save_routine(payload: SaveRoutine):
         if db: 
             db.rollback() 
         return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+
+ # ===================== Note System =====================
+
+import random
+
+def evaluate_note_ai(text: str):
+    """
+    Replace this with OpenAI later
+    For now: dummy AI scoring
+    """
+
+    return {
+        "score": random.randint(60, 95),
+        "completeness": random.randint(60, 95),
+        "keyword_coverage": random.randint(60, 95),
+        "clarity": random.randint(60, 95),
+        "formatting": random.randint(60, 95),
+        "feedback": "Good structure but needs more key definitions"
+    }
+
+@app.post("/api/notes/upload")
+async def upload_note(
+    title: str = Form(...),
+    description: str = Form(...),
+    course: str = Form(...),
+    uploader_id: str = Form(...),
+    file: UploadFile = File(...)
+):
+    db = cursor = None
+    try:
+        file_location = os.path.join(UPLOAD_DIR, file.filename)
+        with open(file_location, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        # ================= AI STEP =================
+        ai_result = evaluate_note_ai(description)
+
+        db = get_db()
+        cursor = db.cursor()
+
+        cursor.execute("""
+            INSERT INTO note 
+            (title, description, course, file_path, filename, file_size, uploaded_by,
+             ai_score, completeness, keyword_coverage, clarity, formatting, feedback)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (
+            title,
+            description,
+            course,
+            file_location,
+            file.filename,
+            os.path.getsize(file_location),
+            uploader_id,
+
+            ai_result["score"],
+            ai_result["completeness"],
+            ai_result["keyword_coverage"],
+            ai_result["clarity"],
+            ai_result["formatting"],
+            ai_result["feedback"]
+        ))
+
+        db.commit()
+
+        return {
+            "success": True,
+            "message": "Note uploaded + AI evaluated",
+            "ai_score": ai_result["score"]
+        }
+
+    except Exception as e:
+        return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.get("/api/notes/all")
+def get_all_notes():
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT 
+                n.note_id,
+                n.title,
+                n.description,
+                n.course,
+                n.file_path,
+                n.filename,
+                n.file_size,
+                n.uploaded_by,
+                n.created_at,
+                n.ai_score,
+                n.completeness,
+                n.keyword_coverage,
+                n.clarity,
+                n.formatting,
+                n.feedback,
+                u.name AS uploader_name
+            FROM note n
+            JOIN users u ON n.uploaded_by = u.user_id
+            ORDER BY n.created_at DESC
+        """)
+
+        return {"success": True, "notes": cursor.fetchall()}
+
     finally:
         if cursor: cursor.close()
         if db: db.close()
