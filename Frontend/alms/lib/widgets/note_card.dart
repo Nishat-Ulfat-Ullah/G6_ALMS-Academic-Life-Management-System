@@ -19,110 +19,186 @@ class NoteCard extends StatelessWidget {
 
   Color _extColor(String ext) {
     switch (ext) {
-      case 'PDF':  return const Color(0xFFE24B4A);
+      case 'PDF':
+        return const Color(0xFFE24B4A);
       case 'DOC':
-      case 'DOCX': return const Color(0xFF185FA5);
+      case 'DOCX':
+        return const Color(0xFF185FA5);
       case 'PPT':
-      case 'PPTX': return const Color(0xFFBA7517);
-      default:    return const Color(0xFF888780);
+      case 'PPTX':
+        return const Color(0xFFBA7517);
+      default:
+        return const Color(0xFF888780);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final filename = (note['filename'] ?? '') as String;
-    final ext = _ext(filename);
-    final color = _extColor(ext);
+    final String filename = (note['filename'] ?? '') as String;
+    final String filePath = (note['file_path'] ?? '') as String;
+
+    final String ext = _ext(filename);
+    final Color color = _extColor(ext);
+
+    final String imageUrl = "http://10.0.2.2:8000/$filePath";
 
     return GestureDetector(
-      onTap: () { /* TODO: open/download */ },
+      onTap: () {
+        // TODO: open file viewer
+      },
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.black12),
           boxShadow: const [
-            BoxShadow(color: Colors.black12, offset: Offset(0, 4), blurRadius: 4),
+            BoxShadow(
+              color: Colors.black12,
+              offset: Offset(0, 4),
+              blurRadius: 4,
+            ),
           ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ================= IMAGE  =================
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
                   color: Colors.grey[100],
                   borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(12)),
+                    top: Radius.circular(12),
+                  ),
                 ),
-                child: Stack(children: [
-                  Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          ext == 'PDF' ? Icons.picture_as_pdf_rounded
-                            : ext == 'DOC' || ext == 'DOCX' ? Icons.description_rounded
-                            : ext == 'PPT' || ext == 'PPTX' ? Icons.slideshow_rounded
-                            : Icons.insert_drive_file_rounded,
-                          size: 48, color: color,
-                        ),
-                        const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                child: Stack(
+                  children: [
+                    Center(
+                      child: (filename.toLowerCase().endsWith('.jpg') ||
+                              filename.toLowerCase().endsWith('.jpeg') ||
+                              filename.toLowerCase().endsWith('.png'))
+                          ? ClipRRect(
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(12),
+                              ),
+                              child: Image.network(
+                                imageUrl,
+                                fit:BoxFit.contain,
+                                width: double.infinity,
+                                height: double.infinity,
+                                errorBuilder: (_, __, ___) =>
+                                    const Icon(
+                                  Icons.broken_image,
+                                  size: 40,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            )
+                          : Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  ext == 'PDF'
+                                      ? Icons.picture_as_pdf_rounded
+                                      : ext == 'DOC' || ext == 'DOCX'
+                                          ? Icons.description_rounded
+                                          : ext == 'PPT' || ext == 'PPTX'
+                                              ? Icons.slideshow_rounded
+                                              : Icons.insert_drive_file,
+                                  size: 48,
+                                  color: color,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  filename.contains('.')
+                                      ? filename
+                                          .split('.')
+                                          .last
+                                          .toUpperCase()
+                                      : 'FILE',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: color,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+
+                    // ================= UPLOADER NAME =================
+                    if (note['uploader_name'] != null)
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        right: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: color.withOpacity(0.12),
+                            color: Colors.black54,
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text(ext,
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+                          child: Text(
+                            note['uploader_name'],
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ================= TITLE + COURSE =================
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          note['title'] ?? '',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          note['course'] ?? '',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  if (note['uploader_name'] != null)
-                    Positioned(
-                      top: 6, left: 6, right: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(note['uploader_name'],
-                          style: const TextStyle(color: Colors.white, fontSize: 9),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ),
+
+                  // ================= SAVE BUTTON =================
+                  GestureDetector(
+                    onTap: onToggleSave,
+                    child: Icon(
+                      isSaved
+                          ? Icons.bookmark
+                          : Icons.bookmark_border,
+                      size: 18,
+                      color: isSaved
+                          ? const Color.fromARGB(255, 138, 201, 243)
+                          : Colors.grey,
                     ),
-                ]),
+                  ),
+                ],
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Row(children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(note['title'] ?? '',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                      Text(note['course'] ?? '',
-                        style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                    ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: onToggleSave,
-                  child: Icon(
-                    isSaved ? Icons.bookmark : Icons.bookmark_border,
-                    size: 18,
-                    color: isSaved
-                        ? const Color.fromARGB(255, 138, 201, 243)
-                        : Colors.grey,
-                  ),
-                ),
-              ]),
             ),
           ],
         ),

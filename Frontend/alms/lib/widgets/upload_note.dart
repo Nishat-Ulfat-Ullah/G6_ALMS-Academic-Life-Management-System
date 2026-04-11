@@ -23,12 +23,21 @@ class _UploadNoteSheetState extends State<UploadNoteSheet> {
   final String _host = Platform.isAndroid ? '10.0.2.2' : '127.0.0.1';
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'doc', 'docx', 'txt', 'ppt', 'pptx', 'jpg', 'png'],
-    );
-    if (result != null && result.files.single.path != null) {
-      setState(() => _file = File(result.files.single.path!));
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+      );
+
+      if (result == null || result.files.single.path == null) return;
+
+      setState(() {
+        _file = File(result.files.single.path!);
+      });
+
+      print("Picked file: ${_file!.path}");
+    } catch (e) {
+      print("File picker error: $e");
     }
   }
 
@@ -43,11 +52,10 @@ class _UploadNoteSheetState extends State<UploadNoteSheet> {
     setState(() => _uploading = true);
     final req = http.MultipartRequest(
         'POST', Uri.parse('http://$_host:8000/api/notes/upload'));
-    req.fields
-      ..['title']       = _titleCtrl.text.trim()
-      ..['description']  = _descCtrl.text.trim()
-      ..['course']      = _courseCtrl.text.trim()
-      ..['uploader_id'] = uid;
+    req.fields['title'] = _titleCtrl.text.trim();
+    req.fields['description'] = _descCtrl.text.trim();
+    req.fields['course'] = _courseCtrl.text.trim();
+    req.fields['uploader_id'] = uid.toString();
     req.files.add(await http.MultipartFile.fromPath('file', _file!.path));
 
     try {

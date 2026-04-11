@@ -164,10 +164,11 @@ void _openUpload() {
                           itemCount: _filtered.length,
                           itemBuilder: (_, i) {
                             final note = _filtered[i];
+                            final id = note['note_id'];
                             return NoteCard(
                               note: note,
-                              isSaved: _saved.contains(note['id'] as int),
-                              onToggleSave: () => _toggleSave(note['id'] as int),
+                              isSaved: _saved.contains(id),
+                              onToggleSave: () => _toggleSave(id),
                             );
                           },
                         ),

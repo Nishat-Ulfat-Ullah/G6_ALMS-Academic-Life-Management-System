@@ -10,8 +10,13 @@ import shutil
 import uvicorn
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
 app = FastAPI()
+
+
+from fastapi.staticfiles import StaticFiles
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -224,10 +229,19 @@ async def upload_note(
 
         db = get_db()
         cursor = db.cursor()
-        cursor.execute(
-            "INSERT INTO notes (title, description, course, filename, uploader_id, file_size) VALUES (%s,%s,%s,%s,%s,%s)",
-            (title, description, course, file.filename, uploader_id, os.path.getsize(file_location))
-        )
+        cursor.execute("""
+            INSERT INTO note 
+            (title, description, course, file_path, filename, file_size, uploaded_by)
+            VALUES (%s,%s,%s,%s,%s,%s,%s)
+        """, (
+            title,
+            description,
+            course,
+            file_location,
+            file.filename,
+            os.path.getsize(file_location),
+            uploader_id
+        ))
         db.commit()
         return {"success": True, "message": "Note uploaded successfully"}
     except Exception as e:
@@ -236,10 +250,10 @@ async def upload_note(
         if cursor: cursor.close()
         if db: db.close()
 
+
 @app.get("/api/notes/all")
 def get_all_notes():
-    db = None
-    cursor = None
+    db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor(dictionary=True)
@@ -248,23 +262,21 @@ def get_all_notes():
             SELECT 
                 n.note_id,
                 n.title,
+                n.description,
+                n.course,
                 n.file_path,
+                n.filename,
+                n.file_size,
                 n.uploaded_by,
                 n.created_at,
                 u.name AS uploader_name
-            FROM notes n
+            FROM note n
             JOIN users u ON n.uploaded_by = u.user_id
             ORDER BY n.created_at DESC
         """)
 
-        notes = cursor.fetchall()
-        return {"success": True, "notes": notes}
-
-    except Exception as e:
-        return json_error(str(e))
+        return {"success": True, "notes": cursor.fetchall()}
 
     finally:
-        if cursor:
-            cursor.close()
-        if db:
-            db.close()
+        if cursor: cursor.close()
+        if db: db.close()
