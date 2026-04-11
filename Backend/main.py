@@ -1,22 +1,21 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
-from typing import Dict, List
-
+from typing import Dict, List, Optional
+from datetime import date, timedelta
 import mysql.connector
 import os
 import shutil
 import uvicorn
+import random
+
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app = FastAPI()
 
-
-from fastapi.staticfiles import StaticFiles
-
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -31,6 +30,7 @@ class User(BaseModel):
     name: str
     email: str
     password: str
+    
     @field_validator('email')
     @classmethod
     def validate_email(cls, v):
@@ -56,7 +56,6 @@ class Consultation(BaseModel):
     day: str
     time_slot: str
 
-
 class Faculty(BaseModel):
     f_id: str
     f_name: str
@@ -74,6 +73,19 @@ class SaveRoutine(BaseModel):
 class FocusSession(BaseModel):
     user_id: str
     duration_seconds: int
+
+# --- New Models for Smart Study Load Analyzer ---
+class AcademicTask(BaseModel):
+    user_id: str
+    title: str
+    course_name: str
+    task_type: str
+    due_date: date
+    estimated_hours: int
+
+class TaskComplete(BaseModel):
+    task_id: int
+
 
 # ===================== HELPERS =====================
 def json_error(message: str, code: int = 400):
@@ -134,7 +146,6 @@ def login(user: LoginUser):
         if cursor: cursor.close()
         if db: db.close()
 
-
 @app.get("/role/{user_id}")
 def check_role(user_id: str):
     db = cursor = None
@@ -176,8 +187,8 @@ def check_role(user_id: str):
         if cursor: cursor.close()
         if db: db.close()
 
-# ===================== Consultations SYSTEM =====================
 
+# ===================== CONSULTATIONS SYSTEM =====================
 @app.post("/save_routine")
 def save_routine(payload: SaveRoutine):
     db = cursor = None
@@ -215,16 +226,8 @@ def save_routine(payload: SaveRoutine):
         if db: db.close()
 
 
- # ===================== Note System =====================
-
-import random
-
+# ===================== NOTE SYSTEM =====================
 def evaluate_note_ai(text: str):
-    """
-    Replace this with OpenAI later
-    For now: dummy AI scoring
-    """
-
     return {
         "score": random.randint(60, 95),
         "completeness": random.randint(60, 95),
@@ -248,7 +251,6 @@ async def upload_note(
         with open(file_location, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
-        # ================= AI STEP =================
         ai_result = evaluate_note_ai(description)
 
         db = get_db()
@@ -260,20 +262,10 @@ async def upload_note(
              ai_score, completeness, keyword_coverage, clarity, formatting, feedback)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (
-            title,
-            description,
-            course,
-            file_location,
-            file.filename,
-            os.path.getsize(file_location),
-            uploader_id,
-
-            ai_result["score"],
-            ai_result["completeness"],
-            ai_result["keyword_coverage"],
-            ai_result["clarity"],
-            ai_result["formatting"],
-            ai_result["feedback"]
+            title, description, course, file_location, file.filename,
+            os.path.getsize(file_location), uploader_id,
+            ai_result["score"], ai_result["completeness"], ai_result["keyword_coverage"],
+            ai_result["clarity"], ai_result["formatting"], ai_result["feedback"]
         ))
 
         db.commit()
@@ -298,23 +290,7 @@ def get_all_notes():
         cursor = db.cursor(dictionary=True)
 
         cursor.execute("""
-            SELECT 
-                n.note_id,
-                n.title,
-                n.description,
-                n.course,
-                n.file_path,
-                n.filename,
-                n.file_size,
-                n.uploaded_by,
-                n.created_at,
-                n.ai_score,
-                n.completeness,
-                n.keyword_coverage,
-                n.clarity,
-                n.formatting,
-                n.feedback,
-                u.name AS uploader_name
+            SELECT n.*, u.name AS uploader_name
             FROM note n
             JOIN users u ON n.uploaded_by = u.user_id
             ORDER BY n.created_at DESC
@@ -348,3 +324,118 @@ def save_focus_session(session: FocusSession):
     finally:
         if cursor: cursor.close()
         if db: db.close()
+
+
+# ===================== SMART STUDY LOAD ANALYZER =====================
+
+@app.post("/api/tasks/add")
+def add_task(task: AcademicTask):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("""
+            INSERT INTO academic_tasks (user_id, title, course_name, task_type, due_date, estimated_hours)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (task.user_id, task.title, task.course_name, task.task_type, task.due_date, task.estimated_hours))
+        db.commit()
+        return {"success": True, "message": "Task added successfully"}
+    except Exception as e:
+        return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.get("/api/study_load/{user_id}")
+def analyze_study_load(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        
+        cursor.execute("""
+            SELECT * FROM academic_tasks 
+            WHERE user_id = %s AND is_completed = FALSE AND due_date >= CURDATE()
+            ORDER BY due_date ASC
+        """, (user_id,))
+        tasks = cursor.fetchall()
+
+        if not tasks:
+            return {"success": True, "message": "No upcoming deadlines. Relax!", "summary": None, "distribution_plan": []}
+
+        today = date.today()
+        total_hours_needed = sum(t["estimated_hours"] for t in tasks)
+        exam_count = sum(1 for t in tasks if t["task_type"] == 'Exam')
+        deadline_count = len(tasks)
+        
+        latest_deadline = max(t["due_date"] for t in tasks)
+        days_available = (latest_deadline - today).days
+        if days_available <= 0: days_available = 1
+
+        daily_hours_recommended = round(total_hours_needed / days_available, 1)
+
+        if daily_hours_recommended > 6 or exam_count >= 2:
+            stress_level = "Critical: High risk of burnout. Focus only on priority items."
+        elif daily_hours_recommended > 3:
+            stress_level = "Moderate: Steady daily effort required."
+        else:
+            stress_level = "Light: Easily manageable workload."
+
+        study_plan = []
+        for task in tasks:
+            days_left = (task["due_date"] - today).days
+            urgency = "High" if days_left <= 3 or task["task_type"] == "Exam" else "Normal"
+            
+            study_plan.append({
+                "task": task["title"],
+                "course": task["course_name"],
+                "type": task["task_type"],
+                "days_left": max(0, days_left),
+                "urgency": urgency,
+                "suggested_action": f"Dedicate {round(task['estimated_hours']/max(1, days_left), 1)} hrs/day starting today."
+            })
+
+        return {
+            "success": True,
+            "summary": {
+                "total_deadlines": deadline_count,
+                "upcoming_exams": exam_count,
+                "total_estimated_hours": total_hours_needed,
+                "recommended_daily_study_hours": daily_hours_recommended,
+                "workload_status": stress_level
+            },
+            "distribution_plan": study_plan
+        }
+    except Exception as e:
+        return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+# --- NEW: Delete Task Endpoint ---
+@app.delete("/api/tasks/delete")
+def delete_task(user_id: str = Query(...), title: str = Query(...)):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        # We find the task by user_id and title
+        cursor.execute(
+            "DELETE FROM academic_tasks WHERE user_id = %s AND title = %s",
+            (user_id, title)
+        )
+        db.commit()
+        
+        # Check if anything was actually deleted
+        if cursor.rowcount == 0:
+            return {"success": False, "message": "Task not found"}
+            
+        return {"success": True, "message": "Task deleted successfully"}
+    except Exception as e:
+        return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

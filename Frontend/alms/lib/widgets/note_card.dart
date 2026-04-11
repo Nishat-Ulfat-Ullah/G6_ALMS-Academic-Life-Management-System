@@ -88,7 +88,7 @@ class NoteCard extends StatelessWidget {
                                 fit: BoxFit.contain,
                                 width: double.infinity,
                                 height: double.infinity,
-                                errorBuilder: (_, __, ___) =>
+                                errorBuilder: (_, _, _) =>
                                     const Icon(
                                   Icons.broken_image,
                                   size: 40,

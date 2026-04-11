@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:alms/pages/my_consultations.dart';
+import 'package:alms/pages/study_dashboard_screen.dart'; // <-- Added new import
 import 'package:alms/widgets/user_session.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -29,7 +30,6 @@ class AppDrawer extends StatelessWidget {
             leading: const Icon(Icons.timer),
             title: const Text('MY CONSULTATIONS'),
             onTap: () {
-      
               if (UserSession.userId != null) {
                 Navigator.push(
                   context,
@@ -50,6 +50,24 @@ class AppDrawer extends StatelessWidget {
             title: const Text('BROWSE NOTES'),
             onTap: () => Navigator.pushNamed(context, '/browsenotes'),
           ),
+          
+          // --- NEW STUDY LOAD ANALYZER MENU ITEM ---
+          ListTile(
+            leading: const Icon(Icons.analytics_outlined),
+            title: const Text('STUDY LOAD ANALYZER'),
+            onTap: () {
+              if (UserSession.userId != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => StudyDashboardScreen(userId: UserSession.userId!),
+                  ),
+                );
+              }
+            },
+          ),
+          // -----------------------------------------
+
           ListTile(
             leading: const Icon(Icons.center_focus_strong), 
             title: const Text('FOCUS MODE'),
