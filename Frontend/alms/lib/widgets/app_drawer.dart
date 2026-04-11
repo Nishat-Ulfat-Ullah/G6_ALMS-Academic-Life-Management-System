@@ -51,6 +51,19 @@ class AppDrawer extends StatelessWidget {
             onTap: () => Navigator.pushNamed(context, '/browsenotes'),
           ),
           ListTile(
+            leading: const Icon(Icons.center_focus_strong), 
+            title: const Text('FOCUS MODE'),
+            onTap: () {
+              if (UserSession.userId != null) {
+                Navigator.pushNamed(
+                  context, 
+                  '/focusmode', 
+                  arguments: UserSession.userId!, // Safely use your global session ID here
+                );
+              }
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.settings),
             title: const Text('S E T T I N G S'),
             onTap: () => Navigator.pushNamed(context, '/settingspage'),
