@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:alms/widgets/app_drawer.dart';
-import 'package:alms/widgets/user_session.dart';
 
 class HomePage extends StatelessWidget {
   final String? userId;

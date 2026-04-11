@@ -204,3 +204,67 @@ def save_routine(payload: SaveRoutine):
     finally:
         if cursor: cursor.close()
         if db: db.close()
+
+
+ # ===================== Note System =====================
+
+@app.post("/api/notes/upload")
+async def upload_note(
+    title: str = Form(...),
+    description: str = Form(...),
+    course: str = Form(...),
+    uploader_id: str = Form(...),
+    file: UploadFile = File(...)
+):
+    db = cursor = None
+    try:
+        file_location = os.path.join(UPLOAD_DIR, file.filename)
+        with open(file_location, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute(
+            "INSERT INTO notes (title, description, course, filename, uploader_id, file_size) VALUES (%s,%s,%s,%s,%s,%s)",
+            (title, description, course, file.filename, uploader_id, os.path.getsize(file_location))
+        )
+        db.commit()
+        return {"success": True, "message": "Note uploaded successfully"}
+    except Exception as e:
+        return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.get("/api/notes/all")
+def get_all_notes():
+    db = None
+    cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT 
+                n.note_id,
+                n.title,
+                n.file_path,
+                n.uploaded_by,
+                n.created_at,
+                u.name AS uploader_name
+            FROM notes n
+            JOIN users u ON n.uploaded_by = u.user_id
+            ORDER BY n.created_at DESC
+        """)
+
+        notes = cursor.fetchall()
+        return {"success": True, "notes": notes}
+
+    except Exception as e:
+        return json_error(str(e))
+
+    finally:
+        if cursor:
+            cursor.close()
+        if db:
+            db.close()
