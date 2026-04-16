@@ -66,15 +66,23 @@ class SaveNote(BaseModel):
     user_id: str
     note_id: int
 
+
+#------ Nishat --------
 class SaveRoutine(BaseModel):
     provider_id: str
     routine: Dict[str, List[str]]
 
+class UpdateStatus(BaseModel):
+    booking_id: int
+    status: str
+
+
+#------ Rubaiyat -------
 class FocusSession(BaseModel):
     user_id: str
     duration_seconds: int
 
-# --- New Models for Smart Study Load Analyzer ---
+# --- Shehraj ---
 class AcademicTask(BaseModel):
     user_id: str
     title: str
@@ -188,7 +196,7 @@ def check_role(user_id: str):
         if db: db.close()
 
 
-# ===================== CONSULTATIONS SYSTEM =====================
+# ===================== CONSULTATIONS SYSTEM (Nishat) =====================
 @app.post("/save_routine")
 def save_routine(payload: SaveRoutine):
     db = cursor = None
@@ -225,6 +233,116 @@ def save_routine(payload: SaveRoutine):
         if cursor: cursor.close()
         if db: db.close()
 
+# ===================== My Consultation Page (Nishat) =====================
+@app.get("/my_consultations/{user_id}")
+def get_my_consultations(user_id: str, role: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        bookings = []
+        
+        # Removed 'Completed' and 'Rejected' from these queries
+        if role == "student":
+            cursor.execute("""
+                SELECT * FROM consultation_bookings 
+                WHERE student_id = %s AND status IN ('Pending', 'Accepted')
+                ORDER BY created_at DESC
+            """, (user_id,))
+            bookings = cursor.fetchall()
+            
+        elif role == "faculty":
+            cursor.execute("SELECT f_initial FROM faculties WHERE f_id = %s", (user_id,))
+            faculty_record = cursor.fetchone()
+            if faculty_record and faculty_record['f_initial']:
+                f_initial = faculty_record['f_initial']
+                cursor.execute("""
+                    SELECT * FROM consultation_bookings 
+                    WHERE provider_id = %s AND status IN ('Pending', 'Accepted')
+                    ORDER BY created_at DESC
+                """, (f_initial,))
+                bookings = cursor.fetchall()
+                
+        else: # tutor
+            cursor.execute("""
+                SELECT * FROM consultation_bookings 
+                WHERE provider_id = %s AND status IN ('Pending', 'Accepted')
+                ORDER BY created_at DESC
+            """, (user_id,))
+            bookings = cursor.fetchall()
+            
+        return {"success": True, "data": bookings}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+
+@app.post("/update_consultation_status")
+def update_consultation_status(payload: UpdateStatus):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        
+        cursor.execute(
+            "UPDATE consultation_bookings SET status = %s WHERE booking_id = %s",
+            (payload.status, payload.booking_id)
+        )
+        db.commit()
+        return {"success": True, "message": f"Status updated to {payload.status}"}
+    except Exception as e:
+        if db: db.rollback()
+        # Replaced json_error to ensure it returns cleanly 
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.get("/consultation_history/{user_id}")
+def get_consultation_history(user_id: str, role: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        history = []
+        
+        # Looking only for 'Completed' or 'Rejected'
+        if role == "student":
+            cursor.execute("""
+                SELECT * FROM consultation_bookings 
+                WHERE student_id = %s AND status IN ('Completed', 'Rejected')
+                ORDER BY created_at DESC
+            """, (user_id,))
+            history = cursor.fetchall()
+            
+        elif role == "faculty":
+            cursor.execute("SELECT f_initial FROM faculties WHERE f_id = %s", (user_id,))
+            faculty_record = cursor.fetchone()
+            if faculty_record and faculty_record['f_initial']:
+                f_initial = faculty_record['f_initial']
+                cursor.execute("""
+                    SELECT * FROM consultation_bookings 
+                    WHERE provider_id = %s AND status IN ('Completed', 'Rejected')
+                    ORDER BY created_at DESC
+                """, (f_initial,))
+                history = cursor.fetchall()
+                
+        else: # tutor
+            cursor.execute("""
+                SELECT * FROM consultation_bookings 
+                WHERE provider_id = %s AND status IN ('Completed', 'Rejected')
+                ORDER BY created_at DESC
+            """, (user_id,))
+            history = cursor.fetchall()
+            
+        return {"success": True, "data": history}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
 
 # ===================== NOTE SYSTEM =====================
 def evaluate_note_ai(text: str):
