@@ -10,6 +10,7 @@ import 'package:alms/pages/login.dart';
 import 'package:alms/pages/register.dart';
 import 'package:alms/pages/browse_page.dart';
 import 'package:alms/pages/focusmode.dart';
+import 'package:alms/pages/consultation_history.dart';
 
 void main() {
   runApp(const ALMS());
@@ -46,6 +47,10 @@ class ALMS extends StatelessWidget {
         '/focusmode': (context) {
           final userId = ModalRoute.of(context)!.settings.arguments as String;
           return FocusModeScreen(userId: userId);
+        },
+        '/history': (context) {
+          final userId = ModalRoute.of(context)!.settings.arguments as String;
+          return ConsultationHistory(userId: userId);
         },
       },
     );
