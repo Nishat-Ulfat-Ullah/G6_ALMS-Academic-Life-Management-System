@@ -97,6 +97,24 @@ class FocusSession(BaseModel):
     user_id: str
     duration_seconds: int
 
+
+class PerformanceUpdate(BaseModel):
+    user_id: str
+    attendance_count: int
+    cgpa: float
+    missed_deadlines: int
+    low_quizzes: int
+
+class StudentPerformance(BaseModel):
+    user_id: str
+    attendance_count: int
+    total_classes: int
+    cgpa: float
+    missed_deadlines: int
+    total_deadlines: int
+    low_quizzes: int
+    total_quizzes: int
+
 # --- Shehraj ---
 class AcademicTask(BaseModel):
     user_id: str
@@ -108,6 +126,7 @@ class AcademicTask(BaseModel):
 
 class TaskComplete(BaseModel):
     task_id: int
+
 
 
 # ===================== HELPERS =====================
@@ -609,6 +628,85 @@ def save_note(payload: SaveNote):
         db.commit()
         return {"success": True, "message": "Saved"}
 
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+
+@app.get("/api/academic_risk/{user_id}")
+def get_academic_risk(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        
+        cursor.execute("SELECT * FROM student_performance WHERE user_id = %s", (user_id,))
+        stats = cursor.fetchone()
+
+        if not stats:
+            return {
+                "success": True, 
+                "risk_score": 0, 
+                "zone": "Low", 
+                "suggestion": "No data found. Keep studying!",
+                "details": {"attendance": 0, "total_classes": 20, "cgpa": 0.0, "missed_deadlines": 0, "total_deadlines": 7, "low_quizzes": 0, "total_quizzes": 4}
+            }
+
+        # Calculation Logic
+        att_rate = stats["attendance_count"] / stats["total_classes"]
+        
+        # Risk points
+        att_risk = 40 if att_rate < 0.75 else 0
+        cgpa_risk = 30 if float(stats["cgpa"]) < 3.0 else 0
+        deadline_risk = min(stats["missed_deadlines"] * 15, 30) # Max 30 points
+        
+        total_score = att_risk + cgpa_risk + deadline_risk
+
+        if total_score >= 70:
+            zone, suggestion = "High", "Critical risk: Please consult your faculty advisor."
+        elif total_score >= 40:
+            zone, suggestion = "Medium", "Moderate risk: Improve attendance and quiz scores."
+        else:
+            zone, suggestion = "Low", "Low risk: You are performing well!"
+
+        return {
+            "success": True,
+            "risk_score": total_score,
+            "zone": zone,
+            "suggestion": suggestion,
+            "details": {
+                "attendance": stats["attendance_count"],
+                "total_classes": stats["total_classes"],
+                "cgpa": float(stats["cgpa"]),
+                "missed_deadlines": stats["missed_deadlines"],
+                "total_deadlines": stats["total_deadlines"],
+                "low_quizzes": stats["low_quizzes"],
+                "total_quizzes": stats["total_quizzes"]
+            }
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+        
+# ===================== SMART STUDY LOAD ANALYZER =====================
+
+@app.post("/api/tasks/add")
+def add_task(task: AcademicTask):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("""
+            INSERT INTO academic_tasks (user_id, title, course_name, task_type, due_date, estimated_hours)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (task.user_id, task.title, task.course_name, task.task_type, task.due_date, task.estimated_hours))
+        db.commit()
+        return {"success": True, "message": "Task added successfully"}
+    except Exception as e:
+        return json_error(str(e))
     finally:
         if cursor: cursor.close()
         if db: db.close()
