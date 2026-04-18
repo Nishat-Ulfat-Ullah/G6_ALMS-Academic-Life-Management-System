@@ -206,14 +206,23 @@ class _MyConsultationsState extends State<MyConsultations> {
                     text: (userRole == 'faculty' || userRole == 'tutor')
                         ? 'Set Consultations'
                         : 'Book Consultations',
-                    onTap: () {
-                      Navigator.pushNamed(
+                    onTap: () async {
+                      // 1. Wait for the result from the Book/Set Consultations page
+                      final result = await Navigator.pushNamed(
                         context,
                         (userRole == 'faculty' || userRole == 'tutor')
                             ? '/set_consultations'
                             : '/bookconsultations',
                         arguments: widget.userId,
                       );
+                      
+                      // 2. If the result is true (meaning a new consultation was booked), refresh the data!
+                      if (result == true) {
+                        setState(() {
+                          isLoading = true; // Show the loading spinner while fetching
+                        });
+                        _fetchData(); // Fetch the updated list
+                      }
                     },
                   ),
                   const SizedBox(height: 16),

@@ -76,6 +76,13 @@ class UpdateStatus(BaseModel):
     booking_id: int
     status: str
 
+class BookingRequest(BaseModel):
+    student_id: str
+    provider_id: str 
+    course_name: str
+    day_of_week: str
+    time_slot: str
+    routine_id: int
 
 #------ Rubaiyat -------
 class FocusSession(BaseModel):
@@ -339,6 +346,91 @@ def get_consultation_history(user_id: str, role: str):
             
         return {"success": True, "data": history}
     except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+# ===================== CONSULTATION BOOKING (Nishat) =====================
+@app.get("/api/courses")
+def get_courses():
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM courses")
+        return {"success": True, "data": cursor.fetchall()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.get("/api/providers")
+def get_providers():
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        # Fetching available faculties and sending f_initial as provider_id
+        cursor.execute("""
+            SELECT f_initial as provider_id, f_name as provider_name 
+            FROM faculties 
+            WHERE con_status = 'available'
+        """)
+        return {"success": True, "data": cursor.fetchall()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.get("/api/routines/{provider_initial}")
+def get_provider_routine(provider_initial: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        # JOIN tables to link f_initial (RHD) to f_id (T24001)
+        # Only return slots where is_booked = 0
+        cursor.execute("""
+            SELECT cr.routine_id, cr.day_of_week, cr.time_slot 
+            FROM consultation_routines cr
+            JOIN faculties f ON cr.provider_id = f.f_id
+            WHERE f.f_initial = %s AND cr.is_booked = 0
+        """, (provider_initial,))
+        return {"success": True, "data": cursor.fetchall()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.post("/book_consultation")
+def book_consultation(req: BookingRequest):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        
+        #Insert the booking into consultation_bookings
+        cursor.execute("""
+            INSERT INTO consultation_bookings 
+            (student_id, provider_id, course_name, day_of_week, time_slot, status) 
+            VALUES (%s, %s, %s, %s, %s, 'Pending')
+        """, (req.student_id, req.provider_id, req.course_name, req.day_of_week, req.time_slot))
+        
+        #Update the consultation_routines to mark this specific slot as booked
+        cursor.execute("""
+            UPDATE consultation_routines 
+            SET is_booked = 1 
+            WHERE routine_id = %s
+        """, (req.routine_id,))
+        
+        db.commit()
+        return {"success": True, "message": "Consultation booked successfully"}
+    except Exception as e:
+        if db: db.rollback() 
         return {"success": False, "error": str(e)}
     finally:
         if cursor: cursor.close()
