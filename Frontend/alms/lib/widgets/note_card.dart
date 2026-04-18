@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:alms/pages/note_preview.dart';
+import 'dart:io';
+
 
 class NoteCard extends StatelessWidget {
   final Map<String, dynamic> note;
@@ -45,7 +47,7 @@ class NoteCard extends StatelessWidget {
     final String ext = _ext(filename);
     final Color color = _extColor(ext);
 
-    final String imageUrl = "http://10.0.2.2:8000/$filePath";
+    final String imageUrl = "${(Platform.isAndroid) ? 'http://10.0.2.2:8000' : 'http://127.0.0.1:8000'}/$filePath";
 
     final int upvotes = note['upvotes'] ?? 0;
     final int comments = note['comments'] ?? 0;
