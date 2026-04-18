@@ -76,6 +76,14 @@ class UpdateStatus(BaseModel):
     booking_id: int
     status: str
 
+class RoutineItem(BaseModel):
+    day_of_week: str
+    time_slot: str
+
+class UpdateRoutineRequest(BaseModel):
+    provider_id: str  
+    routines: List[RoutineItem]
+
 class BookingRequest(BaseModel):
     student_id: str
     provider_id: str 
@@ -405,6 +413,33 @@ def get_provider_routine(provider_initial: str):
     finally:
         if cursor: cursor.close()
         if db: db.close()
+
+
+@app.post("/update_routine")
+def update_routine(req: UpdateRoutineRequest):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+
+        cursor.execute("DELETE FROM consultation_routines WHERE provider_id = %s", (req.provider_id,))
+        
+        for slot in req.routines:
+            cursor.execute("""
+                INSERT INTO consultation_routines (provider_id, day_of_week, time_slot, is_booked)
+                VALUES (%s, %s, %s, 0)
+            """, (req.provider_id, slot.day_of_week, slot.time_slot))      
+
+        db.commit()
+        return {"success": True, "message": "Routine updated and all slots reset!"}
+        
+    except Exception as e:
+        if db: db.rollback() 
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
 
 @app.post("/book_consultation")
 def book_consultation(req: BookingRequest):
