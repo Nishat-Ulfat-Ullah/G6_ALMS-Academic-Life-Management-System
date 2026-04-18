@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, field_validator
 from typing import Dict, List
+from datetime import date, timedelta
 
 import mysql.connector
 import os
@@ -118,7 +119,7 @@ def get_db():
     return mysql.connector.connect(
         host="localhost",
         user="root",
-        password="1234",
+        password="123",
         database="project"
     )
 
