@@ -307,17 +307,26 @@ def get_all_notes():
                 n.clarity,
                 n.formatting,
                 n.feedback,
-                u.name AS uploader_name
+                u.name AS uploader_name,
+
+                (SELECT COUNT(*) FROM note_upvotes u WHERE u.note_id = n.note_id) AS upvotes,
+                (SELECT COUNT(*) FROM note_comments c WHERE c.note_id = n.note_id) AS comments
+
             FROM note n
             JOIN users u ON n.uploaded_by = u.user_id
             ORDER BY n.created_at DESC
         """)
 
-        return {"success": True, "notes": cursor.fetchall()}
+        return {
+            "success": True,
+            "notes": cursor.fetchall()
+        }
 
     finally:
-        if cursor: cursor.close()
-        if db: db.close()
+        if cursor:
+            cursor.close()
+        if db:
+            db.close()
 
 @app.post("/api/notes/save")
 def save_note(payload: SaveNote):
@@ -381,3 +390,82 @@ def get_saved_notes(user_id: str):
     finally:
         if cursor: cursor.close()
         if db: db.close()
+
+# ===================== Upvote System =====================
+@app.post("/api/notes/upvote")
+def toggle_upvote(data: dict):
+    db = get_db()
+    cursor = db.cursor()
+
+    note_id = data["note_id"]
+    user_id = data["user_id"]
+
+    cursor.execute(
+        "SELECT * FROM note_upvotes WHERE note_id=%s AND user_id=%s",
+        (note_id, user_id)
+    )
+    existing = cursor.fetchone()
+
+    if existing:
+        cursor.execute(
+            "DELETE FROM note_upvotes WHERE note_id=%s AND user_id=%s",
+            (note_id, user_id)
+        )
+        db.commit()
+        return {"liked": False}
+    else:
+        cursor.execute(
+            "INSERT INTO note_upvotes (note_id, user_id) VALUES (%s, %s)",
+            (note_id, user_id)
+        )
+        db.commit()
+        return {"liked": True}
+    
+
+@app.get("/api/notes/upvotes/{note_id}")
+def get_upvotes(note_id: int):
+    db = get_db()
+    cursor = db.cursor()
+
+    cursor.execute(
+        "SELECT COUNT(*) FROM note_upvotes WHERE note_id=%s",
+        (note_id,)
+    )
+
+    count = cursor.fetchone()[0]
+    return {"count": count}
+
+
+# ===================== Comment System =====================
+
+@app.post("/api/notes/comment")
+def add_comment(data: dict):
+    db = get_db()
+    cursor = db.cursor()
+
+    cursor.execute("""
+        INSERT INTO note_comments (note_id, user_id, comment)
+        VALUES (%s, %s, %s)
+    """, (
+        data["note_id"],
+        data["user_id"],
+        data["comment"]
+    ))
+
+    db.commit()
+    return {"success": True}
+
+
+@app.get("/api/notes/comments/{note_id}")
+def get_comments(note_id: int):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT *
+        FROM note_comments
+        WHERE note_id=%s
+        ORDER BY created_at DESC
+    """, (note_id,))
+
+    return {"comments": cursor.fetchall()}
