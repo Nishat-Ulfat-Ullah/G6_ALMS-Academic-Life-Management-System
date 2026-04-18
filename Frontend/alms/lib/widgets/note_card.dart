@@ -5,12 +5,14 @@ class NoteCard extends StatelessWidget {
   final Map<String, dynamic> note;
   final bool isSaved;
   final VoidCallback onToggleSave;
+  final Future<void> Function()? onRefresh;
 
   const NoteCard({
     super.key,
     required this.note,
     required this.isSaved,
     required this.onToggleSave,
+    this.onRefresh,
   });
 
   String _ext(String filename) {
@@ -55,7 +57,11 @@ class NoteCard extends StatelessWidget {
           MaterialPageRoute(
             builder: (_) => NotePreviewPage(note: note),
           ),
-        );
+        ).then((_) async {
+          if (onRefresh != null) {
+            await onRefresh!();
+          }
+        });
       },
       child: Container(
         decoration: BoxDecoration(
@@ -154,7 +160,7 @@ class NoteCard extends StatelessWidget {
                         onTap: onToggleSave,
                         child: Icon(
                           isSaved ? Icons.bookmark : Icons.bookmark_border,
-                          color: Colors.white,
+                          color: isSaved ? Colors.blue : Colors.white,
                         ),
                       ),
                     ),

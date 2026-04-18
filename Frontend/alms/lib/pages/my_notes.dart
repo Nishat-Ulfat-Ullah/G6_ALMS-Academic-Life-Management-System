@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:alms/widgets/app_drawer.dart';
 import 'package:alms/pages/uploaded_notes.dart';
 import 'package:alms/pages/saved_notes.dart';
+import 'package:alms/widgets/app_background.dart';
 
 class MyNotes extends StatelessWidget {
   const MyNotes({super.key});
@@ -12,42 +13,45 @@ class MyNotes extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: const Color.fromARGB(255, 138, 201, 243),
         title: const Text("My Notes"),
+        elevation: 0,
       ),
       drawer: const AppDrawer(),
 
-      body: Column(
-        children: const [
+      body: AppBackground(
+        child: Column(
+          children: [
 
-          SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-          // ================= UPLOADED =================
-          _MenuTile(
-            title: "My Uploaded Notes",
-            icon: Icons.upload_file,
-            page: UploadedNotesPage(),
-          ),
+            // ================= UPLOADED =================
+            _MenuTile(
+              title: "My Uploaded Notes",
+              icon: Icons.upload_file,
+              page: const UploadedNotesPage(),
+            ),
 
-          Divider(),
+            const Divider(),
 
-          // ================= SAVED =================
-          _MenuTile(
-            title: "Saved Notes",
-            icon: Icons.bookmark,
-            page: SavedNotesPage(),
-          ),
-        ],
+            // ================= SAVED =================
+            _MenuTile(
+              title: "Saved Notes",
+              icon: Icons.bookmark,
+              page: const SavedNotesPage(),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ================= REUSABLE TILE =================
 class _MenuTile extends StatelessWidget {
   final String title;
   final IconData icon;
   final Widget page;
 
   const _MenuTile({
+    super.key,
     required this.title,
     required this.icon,
     required this.page,
