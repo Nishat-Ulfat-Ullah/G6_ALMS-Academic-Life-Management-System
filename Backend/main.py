@@ -148,7 +148,7 @@ def get_db():
     return mysql.connector.connect(
         host="localhost",
         user="root",
-        password="123",
+        password="1234",
         database="project"
     )
 

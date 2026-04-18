@@ -5,8 +5,9 @@ import 'dart:convert';
 import 'dart:io';
 
 class FocusModeScreen extends StatefulWidget {
-  final String userId; 
-  const FocusModeScreen({Key? key, required this.userId}) : super(key: key);
+  final String userId; // Pass the logged-in user ID to this screen
+
+  const FocusModeScreen({super.key, required this.userId});
 
   @override
   _FocusModeScreenState createState() => _FocusModeScreenState();

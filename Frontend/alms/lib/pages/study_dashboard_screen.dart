@@ -5,7 +5,7 @@ import 'add_task_screen.dart';
 class StudyDashboardScreen extends StatefulWidget {
   final String userId;
 
-  const StudyDashboardScreen({Key? key, required this.userId}) : super(key: key);
+  const StudyDashboardScreen({super.key, required this.userId});
 
   @override
   _StudyDashboardScreenState createState() => _StudyDashboardScreenState();
@@ -231,7 +231,7 @@ class _StudyDashboardScreenState extends State<StudyDashboardScreen> {
                 ),
               ),
             );
-          }).toList(),
+          }),
 
           const SizedBox(height: 80), // Space for FAB
         ],

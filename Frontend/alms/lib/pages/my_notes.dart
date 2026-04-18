@@ -51,7 +51,6 @@ class _MenuTile extends StatelessWidget {
   final Widget page;
 
   const _MenuTile({
-    super.key,
     required this.title,
     required this.icon,
     required this.page,
