@@ -127,7 +127,17 @@ class AcademicTask(BaseModel):
 class TaskComplete(BaseModel):
     task_id: int
 
+class CourseOutline(BaseModel):
+    user_id: str
+    course_code: str
+    course_name: str
+    stream: str
+    status: str
+    credits: int = 3
 
+class DeleteCourse(BaseModel):
+    user_id: str
+    course_code: str
 
 # ===================== HELPERS =====================
 
@@ -633,6 +643,30 @@ def save_note(payload: SaveNote):
         if db: db.close()
 
 
+#focus mode session
+@app.post("/save_focus_session")
+def save_focus_session(session: FocusSession):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        
+        
+        cursor.execute(
+            "INSERT INTO focus_sessions (user_id, duration_seconds) VALUES (%s, %s)",
+            (session.user_id, session.duration_seconds)
+        )
+        db.commit()
+        return {"success": True, "message": "Focus session saved"}
+    except Exception as e:
+        if db: 
+            db.rollback()
+        return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+
 @app.get("/api/academic_risk/{user_id}")
 def get_academic_risk(user_id: str):
     db = cursor = None
@@ -699,14 +733,10 @@ def add_task(task: AcademicTask):
     try:
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("""
-            INSERT INTO academic_tasks (user_id, title, course_name, task_type, due_date, estimated_hours)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (task.user_id, task.title, task.course_name, task.task_type, task.due_date, task.estimated_hours))
+        cursor.execute("INSERT INTO academic_tasks (user_id, title, course_name, task_type, due_date, estimated_hours) VALUES (%s, %s, %s, %s, %s, %s)", (task.user_id, task.title, task.course_name, task.task_type, task.due_date, task.estimated_hours))
         db.commit()
         return {"success": True, "message": "Task added successfully"}
-    except Exception as e:
-        return json_error(str(e))
+    except Exception as e: return json_error(str(e))
     finally:
         if cursor: cursor.close()
         if db: db.close()
@@ -779,6 +809,62 @@ def get_saved_notes(user_id: str):
         if cursor: cursor.close()
         if db: db.close()
 
+
+# ===================== COURSE OUTLINE SYSTEM =====================
+@app.post("/api/courses/update")
+def update_course_outline(course: CourseOutline):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        query = """
+            INSERT INTO course_outlines (user_id, course_code, course_name, stream, status, credits)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE 
+            status = VALUES(status), course_name = VALUES(course_name), stream = VALUES(stream)
+        """
+        cursor.execute(query, (course.user_id, course.course_code, course.course_name, course.stream, course.status, course.credits))
+        db.commit()
+        return {"success": True, "message": "Course outline updated"}
+    except Exception as e: return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.get("/api/courses/progress/{user_id}")
+def get_course_progress(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM course_outlines WHERE user_id = %s", (user_id,))
+        courses = cursor.fetchall()
+        if not courses:
+            return {"success": True, "completed_count": 0, "remaining_count": 0, "progress_percent": 0, "courses": []}
+        completed = [c for c in courses if c['status'] == 'Completed']
+        percent = round((len(completed) / len(courses)) * 100, 1) if courses else 0
+        return {"success": True, "completed_count": len(completed), "remaining_count": len(courses)-len(completed), "progress_percent": percent, "courses": courses}
+    except Exception as e: return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.post("/api/courses/delete")
+def delete_course_outline(payload: DeleteCourse):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM course_outlines WHERE user_id=%s AND course_code=%s", (payload.user_id, payload.course_code))
+        db.commit()
+        return {"success": True, "message": "Course deleted"}
+    except Exception as e: return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
         
 # ===================== Upvote System =====================
 @app.post("/api/notes/upvote")
