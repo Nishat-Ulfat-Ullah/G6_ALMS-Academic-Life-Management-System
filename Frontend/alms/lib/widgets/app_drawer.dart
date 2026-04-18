@@ -58,7 +58,7 @@ class AppDrawer extends StatelessWidget {
                 Navigator.pushNamed(
                   context, 
                   '/focusmode', 
-                  arguments: UserSession.userId!, // Safely use your global session ID here
+                  arguments: UserSession.userId!,
                 );
               }
             },
