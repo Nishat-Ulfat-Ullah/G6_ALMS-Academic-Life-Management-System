@@ -5,6 +5,7 @@ class NoteCard extends StatelessWidget {
   final Map<String, dynamic> note;
   final bool isSaved;
   final VoidCallback onToggleSave;
+  final VoidCallback? onToggleLike;
   final Future<void> Function()? onRefresh;
 
   const NoteCard({
@@ -12,6 +13,7 @@ class NoteCard extends StatelessWidget {
     required this.note,
     required this.isSaved,
     required this.onToggleSave,
+    this.onToggleLike,
     this.onRefresh,
   });
 
@@ -79,8 +81,6 @@ class NoteCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
-            // ================= IMAGE =================
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
@@ -127,7 +127,6 @@ class NoteCard extends StatelessWidget {
                               ],
                             ),
                     ),
-
                     if (note['uploader_name'] != null)
                       Positioned(
                         top: 6,
@@ -150,7 +149,6 @@ class NoteCard extends StatelessWidget {
                           ),
                         ),
                       ),
-
                     if (aiScore != null)
                       Positioned(
                         bottom: 6,
@@ -180,20 +178,16 @@ class NoteCard extends StatelessWidget {
                 ),
               ),
             ),
-
-            // ================= TITLE + STATS =================
             Padding(
               padding: const EdgeInsets.all(8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-
                   Text(
                     note['title'] ?? '',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-
                   Text(
                     note['course'] ?? '',
                     style: const TextStyle(
@@ -201,25 +195,27 @@ class NoteCard extends StatelessWidget {
                       color: Colors.grey,
                     ),
                   ),
-
                   const SizedBox(height: 6),
-
                   Row(
                     children: [
-                      const Icon(Icons.thumb_up_alt_outlined,
-                          size: 14, color: Colors.grey),
+                      GestureDetector(
+                        onTap: onToggleLike,
+                        child: Icon(
+                          Icons.thumb_up_alt,
+                          size: 14,
+                          color: note['is_liked'] == true
+                              ? Colors.blue
+                              : Colors.grey,
+                        ),
+                      ),
                       const SizedBox(width: 4),
                       Text("$upvotes"),
-
                       const SizedBox(width: 12),
-
                       const Icon(Icons.comment,
                           size: 14, color: Colors.grey),
                       const SizedBox(width: 4),
                       Text("$comments"),
-
                       const Spacer(),
-
                       GestureDetector(
                         onTap: onToggleSave,
                         child: Icon(

@@ -375,7 +375,26 @@ def get_saved_notes(user_id: str):
         cursor = db.cursor(dictionary=True)
 
         cursor.execute("""
-            SELECT n.*
+            SELECT 
+                n.note_id,
+                n.title,
+                n.description,
+                n.course,
+                n.file_path,
+                n.filename,
+                n.file_size,
+                n.uploaded_by,
+                n.created_at,
+                n.ai_score,
+                n.completeness,
+                n.keyword_coverage,
+                n.clarity,
+                n.formatting,
+                n.feedback,
+
+                (SELECT COUNT(*) FROM note_upvotes u WHERE u.note_id = n.note_id) AS upvotes,
+                (SELECT COUNT(*) FROM note_comments c WHERE c.note_id = n.note_id) AS comments
+
             FROM note n
             JOIN saved_notes s ON n.note_id = s.note_id
             WHERE s.user_id = %s
@@ -390,7 +409,6 @@ def get_saved_notes(user_id: str):
     finally:
         if cursor: cursor.close()
         if db: db.close()
-
 # ===================== Upvote System =====================
 @app.post("/api/notes/upvote")
 def toggle_upvote(data: dict):
