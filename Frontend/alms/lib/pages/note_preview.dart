@@ -16,16 +16,17 @@ class _NotePreviewPageState extends State<NotePreviewPage> {
   final String _host = "10.0.2.2";
 
   List comments = [];
-  bool isLiked = false;
-  int upvotes = 0;
+  late bool isLiked;
+  late int upvotes;
 
   final TextEditingController commentController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    isLiked = widget.note['isLiked'] == 1 || widget.note['isLiked'] == true;
+    upvotes = widget.note['upvotes'] ?? 0;
     loadComments();
-    loadUpvotes();
   }
 
   // ================= LOAD COMMENTS =================
@@ -41,23 +42,6 @@ class _NotePreviewPageState extends State<NotePreviewPage> {
 
       setState(() {
         comments = data['comments'];
-      });
-    } catch (_) {}
-  }
-
-  // ================= LOAD UPVOTES =================
-  Future<void> loadUpvotes() async {
-    try {
-      final res = await http.get(
-        Uri.parse(
-          "http://$_host:8000/api/notes/upvotes/${widget.note['note_id']}",
-        ),
-      );
-
-      final data = jsonDecode(res.body);
-
-      setState(() {
-        upvotes = data['count'];
       });
     } catch (_) {}
   }
@@ -78,7 +62,12 @@ class _NotePreviewPageState extends State<NotePreviewPage> {
 
       setState(() {
         isLiked = data['liked'];
-        upvotes += isLiked ? 1 : -1;
+
+        if (isLiked) {
+          upvotes++;
+        } else {
+          upvotes = upvotes > 0 ? upvotes - 1 : 0;
+        }
       });
     } catch (_) {}
   }
@@ -122,7 +111,6 @@ class _NotePreviewPageState extends State<NotePreviewPage> {
         title: const Text("Note Preview"),
         backgroundColor: const Color.fromARGB(255, 138, 201, 243),
       ),
-
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -249,12 +237,12 @@ class _NotePreviewPageState extends State<NotePreviewPage> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: comments.length,
               itemBuilder: (context, i) {
-                final c = comments[i];
+              final c = comments[i];
 
-                return ListTile(
-                  title: Text(c['comment']),
-                  subtitle: Text(c['created_at']), // TIME SHOWN HERE
-                );
+              return ListTile(
+                title: Text(c['user_name']),
+                subtitle: Text("${c['comment']}\n${c['created_at']}"),
+              );
               },
             ),
 

@@ -283,8 +283,8 @@ async def upload_note(
         if cursor: cursor.close()
         if db: db.close()
 
-@app.get("/api/notes/all")
-def get_all_notes():
+@app.get("/api/notes/all/{user_id}")
+def get_all_notes(user_id: str):
     db = cursor = None
     try:
         db = get_db()
@@ -310,12 +310,17 @@ def get_all_notes():
                 u.name AS uploader_name,
 
                 (SELECT COUNT(*) FROM note_upvotes u WHERE u.note_id = n.note_id) AS upvotes,
-                (SELECT COUNT(*) FROM note_comments c WHERE c.note_id = n.note_id) AS comments
+                (SELECT COUNT(*) FROM note_comments c WHERE c.note_id = n.note_id) AS comments,
+
+                EXISTS(
+                    SELECT 1 FROM note_upvotes u2 
+                    WHERE u2.note_id = n.note_id AND u2.user_id = %s
+                ) AS isLiked
 
             FROM note n
             JOIN users u ON n.uploaded_by = u.user_id
             ORDER BY n.created_at DESC
-        """)
+        """, (user_id,))
 
         return {
             "success": True,
@@ -323,10 +328,8 @@ def get_all_notes():
         }
 
     finally:
-        if cursor:
-            cursor.close()
-        if db:
-            db.close()
+        if cursor: cursor.close()
+        if db: db.close()
 
 @app.post("/api/notes/save")
 def save_note(payload: SaveNote):
@@ -393,13 +396,18 @@ def get_saved_notes(user_id: str):
                 n.feedback,
 
                 (SELECT COUNT(*) FROM note_upvotes u WHERE u.note_id = n.note_id) AS upvotes,
-                (SELECT COUNT(*) FROM note_comments c WHERE c.note_id = n.note_id) AS comments
+                (SELECT COUNT(*) FROM note_comments c WHERE c.note_id = n.note_id) AS comments,
+
+                EXISTS(
+                    SELECT 1 FROM note_upvotes u2 
+                    WHERE u2.note_id = n.note_id AND u2.user_id = %s
+                ) AS isLiked
 
             FROM note n
             JOIN saved_notes s ON n.note_id = s.note_id
             WHERE s.user_id = %s
             ORDER BY s.id DESC
-        """, (user_id,))
+        """, (user_id, user_id))
 
         return {
             "success": True,
@@ -409,6 +417,8 @@ def get_saved_notes(user_id: str):
     finally:
         if cursor: cursor.close()
         if db: db.close()
+
+        
 # ===================== Upvote System =====================
 @app.post("/api/notes/upvote")
 def toggle_upvote(data: dict):
@@ -473,17 +483,20 @@ def add_comment(data: dict):
     db.commit()
     return {"success": True}
 
-
 @app.get("/api/notes/comments/{note_id}")
 def get_comments(note_id: int):
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
     cursor.execute("""
-        SELECT *
+        SELECT 
+            note_comments.comment,
+            note_comments.created_at,
+            users.name AS user_name
         FROM note_comments
-        WHERE note_id=%s
-        ORDER BY created_at DESC
+        JOIN users ON note_comments.user_id = users.user_id
+        WHERE note_comments.note_id=%s
+        ORDER BY note_comments.created_at DESC
     """, (note_id,))
 
     return {"comments": cursor.fetchall()}

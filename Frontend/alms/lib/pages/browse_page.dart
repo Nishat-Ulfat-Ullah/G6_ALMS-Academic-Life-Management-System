@@ -36,7 +36,7 @@ class _BrowseNotesState extends State<BrowseNotes> {
   Future<void> _fetchNotes() async {
     try {
       final res = await http.get(
-        Uri.parse('http://$_host:8000/api/notes/all'),
+      Uri.parse('http://$_host:8000/api/notes/all/${UserSession.userId}'),
       );
 
       final data = jsonDecode(res.body);
