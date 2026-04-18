@@ -23,50 +23,78 @@ class _BrowseNotesState extends State<BrowseNotes> {
 
   final String _host = Platform.isAndroid ? '10.0.2.2' : '127.0.0.1';
 
-  @override
-  void initState() { super.initState(); _loadAll(); }
+@override
+void initState() {
+  super.initState();
+  _loadAll().then((_) => _fetchSaved());
+}
 
 Future<void> _loadAll() =>
     Future.wait([_fetchNotes()]);
 
-  Future<void> _fetchNotes() async {
-    try {
-      final res  = await http.get(Uri.parse('http://$_host:8000/api/notes/all'));
-      final data = jsonDecode(res.body);
-      if (data['success'] == true) {
-        setState(() { _notes = List<Map<String, dynamic>>.from(data['notes']); _loading = false; });
-      }
-    } catch (_) { setState(() => _loading = false); }
-  }
-
-  // Future<void> _fetchSaved() async {
-  //   final uid = UserSession.userId;
-  //   if (uid == null) return;
-  //   try {
-  //     final res  = await http.get(Uri.parse('http://$_host:8000/api/notes/saved/$uid'));
-  //     final data = jsonDecode(res.body);
-  //     if (data['success'] == true) {
-  //       setState(() => _saved = List.from(data['notes']).map((n) => n['id'] as int).toSet());
-  //     }
-  //   } catch (_) {}
-  // }
-
-  Future<void> _toggleSave(int id) async {
-    final uid     = UserSession.userId; if (uid == null) return;
-    final wasSaved = _saved.contains(id);
-    setState(() => wasSaved ? _saved.remove(id) : _saved.add(id));
-    try {
-      if (wasSaved) {
-        await http.delete(Uri.parse('http://$_host:8000/api/notes/unsave/$uid/$id'));
-      } else {
-        await http.post(Uri.parse('http://$_host:8000/api/notes/save'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'user_id': uid, 'note_id': id}));
-      }
-    } catch (_) {
-      setState(() => wasSaved ? _saved.add(id) : _saved.remove(id));
+Future<void> _fetchNotes() async {
+  try {
+    final res  = await http.get(Uri.parse('http://$_host:8000/api/notes/all'));
+    final data = jsonDecode(res.body);
+    if (data['success'] == true) {
+      setState(() { _notes = List<Map<String, dynamic>>.from(data['notes']); _loading = false; });
     }
-  }
+  } catch (_) { setState(() => _loading = false); }
+}
+
+Future<void> _fetchSaved() async {
+  final uid = UserSession.userId;
+  if (uid == null) return;
+
+  try {
+    final res = await http.get(
+      Uri.parse('http://$_host:8000/api/notes/saved/$uid'),
+    );
+
+    final data = jsonDecode(res.body);
+
+    if (data['success'] == true) {
+      setState(() {
+        _saved.clear();
+        _saved.addAll(
+          (data['notes'] as List)
+              .map((n) => n['note_id'] as int),
+        );
+      });
+    }
+  } catch (_) {}
+}
+
+Future<void> _toggleSave(int id) async {
+  final uid = UserSession.userId;
+  if (uid == null) return;
+
+  final wasSaved = _saved.contains(id);
+
+  try {
+    if (wasSaved) {
+      await http.post(
+        Uri.parse('http://$_host:8000/api/notes/unsave'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'user_id': uid,
+          'note_id': id,
+        }),
+      );
+      setState(() => _saved.remove(id));
+    } else {
+      await http.post(
+        Uri.parse('http://$_host:8000/api/notes/save'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'user_id': uid,
+          'note_id': id,
+        }),
+      );
+      setState(() => _saved.add(id));
+    }
+  } catch (_) {}
+}
 
   List<Map<String, dynamic>> get _filtered => _notes.where((n) =>
     (_filter == 'All' || (n['course'] ?? '').toString().toUpperCase().contains(_filter)) &&
