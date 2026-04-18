@@ -66,8 +66,6 @@ class SaveNote(BaseModel):
     user_id: str
     note_id: int
 
-
-#------ Nishat --------
 class SaveRoutine(BaseModel):
     provider_id: str
     routine: Dict[str, List[str]]
@@ -76,13 +74,10 @@ class UpdateStatus(BaseModel):
     booking_id: int
     status: str
 
-
-#------ Rubaiyat -------
 class FocusSession(BaseModel):
     user_id: str
     duration_seconds: int
 
-# --- Shehraj ---
 class AcademicTask(BaseModel):
     user_id: str
     title: str
@@ -94,6 +89,17 @@ class AcademicTask(BaseModel):
 class TaskComplete(BaseModel):
     task_id: int
 
+class CourseOutline(BaseModel):
+    user_id: str
+    course_code: str
+    course_name: str
+    stream: str
+    status: str
+    credits: int = 3
+
+class DeleteCourse(BaseModel):
+    user_id: str
+    course_code: str
 
 # ===================== HELPERS =====================
 def json_error(message: str, code: int = 400):
@@ -101,12 +107,11 @@ def json_error(message: str, code: int = 400):
 
 def get_db():
     return mysql.connector.connect(
-        host="localhost",
+        host="127.0.0.1",
         user="root",
         password="123",
         database="project"
     )
-
 
 # ===================== USER SYSTEM =====================
 @app.post("/register")
@@ -162,8 +167,7 @@ def check_role(user_id: str):
         cursor = db.cursor(dictionary=True)
 
         cursor.execute(
-            "SELECT f_id AS id, f_name AS name, f_initial AS initial, con_status AS con_status "
-            "FROM faculties WHERE f_id=%s",
+            "SELECT f_id AS id, f_name AS name, f_initial AS initial, con_status AS con_status FROM faculties WHERE f_id=%s",
             (user_id,)
         )
         faculty = cursor.fetchone()
@@ -171,8 +175,7 @@ def check_role(user_id: str):
             return {"success": True, "role": "faculty", "person": faculty}
 
         cursor.execute(
-            "SELECT st_id AS id, st_name AS name, st_initial AS initial, st_con_status AS con_status "
-            "FROM student_tutors WHERE st_id=%s",
+            "SELECT st_id AS id, st_name AS name, st_initial AS initial, st_con_status AS con_status FROM student_tutors WHERE st_id=%s",
             (user_id,)
         )
         tutor = cursor.fetchone()
@@ -180,8 +183,7 @@ def check_role(user_id: str):
             return {"success": True, "role": "tutor", "person": tutor}
 
         cursor.execute(
-            "SELECT user_id AS id, name AS name, email AS email "
-            "FROM users WHERE user_id=%s",
+            "SELECT user_id AS id, name AS name, email AS email FROM users WHERE user_id=%s",
             (user_id,)
         )
         student = cursor.fetchone()
@@ -195,151 +197,22 @@ def check_role(user_id: str):
         if cursor: cursor.close()
         if db: db.close()
 
-
-# ===================== CONSULTATIONS SYSTEM (Nishat) =====================
+# ===================== CONSULTATIONS SYSTEM =====================
 @app.post("/save_routine")
 def save_routine(payload: SaveRoutine):
     db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor()
-        
-        cursor.execute(
-            "DELETE FROM consultation_routines WHERE provider_id = %s AND is_booked = FALSE",
-            (payload.provider_id,)
-        )
-
-        insert_query = """
-            INSERT IGNORE INTO consultation_routines (provider_id, day_of_week, time_slot, is_booked)
-            VALUES (%s, %s, %s, FALSE)
-        """
-        
-        insert_data = []
-        for day, times in payload.routine.items():
-            for time_slot in times:
-                insert_data.append((payload.provider_id, day, time_slot))
-
-        if insert_data:
-            cursor.executemany(insert_query, insert_data)
-
+        cursor.execute("DELETE FROM consultation_routines WHERE provider_id = %s AND is_booked = FALSE", (payload.provider_id,))
+        insert_query = "INSERT IGNORE INTO consultation_routines (provider_id, day_of_week, time_slot, is_booked) VALUES (%s, %s, %s, FALSE)"
+        insert_data = [(payload.provider_id, day, t) for day, times in payload.routine.items() for t in times]
+        if insert_data: cursor.executemany(insert_query, insert_data)
         db.commit()
         return {"success": True, "message": "Routine saved successfully"}
-
     except Exception as e:
-        if db: 
-            db.rollback() 
+        if db: db.rollback() 
         return json_error(str(e))
-    finally:
-        if cursor: cursor.close()
-        if db: db.close()
-
-# ===================== My Consultation Page (Nishat) =====================
-@app.get("/my_consultations/{user_id}")
-def get_my_consultations(user_id: str, role: str):
-    db = cursor = None
-    try:
-        db = get_db()
-        cursor = db.cursor(dictionary=True)
-        bookings = []
-        
-        # Removed 'Completed' and 'Rejected' from these queries
-        if role == "student":
-            cursor.execute("""
-                SELECT * FROM consultation_bookings 
-                WHERE student_id = %s AND status IN ('Pending', 'Accepted')
-                ORDER BY created_at DESC
-            """, (user_id,))
-            bookings = cursor.fetchall()
-            
-        elif role == "faculty":
-            cursor.execute("SELECT f_initial FROM faculties WHERE f_id = %s", (user_id,))
-            faculty_record = cursor.fetchone()
-            if faculty_record and faculty_record['f_initial']:
-                f_initial = faculty_record['f_initial']
-                cursor.execute("""
-                    SELECT * FROM consultation_bookings 
-                    WHERE provider_id = %s AND status IN ('Pending', 'Accepted')
-                    ORDER BY created_at DESC
-                """, (f_initial,))
-                bookings = cursor.fetchall()
-                
-        else: # tutor
-            cursor.execute("""
-                SELECT * FROM consultation_bookings 
-                WHERE provider_id = %s AND status IN ('Pending', 'Accepted')
-                ORDER BY created_at DESC
-            """, (user_id,))
-            bookings = cursor.fetchall()
-            
-        return {"success": True, "data": bookings}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-    finally:
-        if cursor: cursor.close()
-        if db: db.close()
-
-
-@app.post("/update_consultation_status")
-def update_consultation_status(payload: UpdateStatus):
-    db = cursor = None
-    try:
-        db = get_db()
-        cursor = db.cursor()
-        
-        cursor.execute(
-            "UPDATE consultation_bookings SET status = %s WHERE booking_id = %s",
-            (payload.status, payload.booking_id)
-        )
-        db.commit()
-        return {"success": True, "message": f"Status updated to {payload.status}"}
-    except Exception as e:
-        if db: db.rollback()
-        # Replaced json_error to ensure it returns cleanly 
-        return {"success": False, "error": str(e)}
-    finally:
-        if cursor: cursor.close()
-        if db: db.close()
-
-@app.get("/consultation_history/{user_id}")
-def get_consultation_history(user_id: str, role: str):
-    db = cursor = None
-    try:
-        db = get_db()
-        cursor = db.cursor(dictionary=True)
-        history = []
-        
-        # Looking only for 'Completed' or 'Rejected'
-        if role == "student":
-            cursor.execute("""
-                SELECT * FROM consultation_bookings 
-                WHERE student_id = %s AND status IN ('Completed', 'Rejected')
-                ORDER BY created_at DESC
-            """, (user_id,))
-            history = cursor.fetchall()
-            
-        elif role == "faculty":
-            cursor.execute("SELECT f_initial FROM faculties WHERE f_id = %s", (user_id,))
-            faculty_record = cursor.fetchone()
-            if faculty_record and faculty_record['f_initial']:
-                f_initial = faculty_record['f_initial']
-                cursor.execute("""
-                    SELECT * FROM consultation_bookings 
-                    WHERE provider_id = %s AND status IN ('Completed', 'Rejected')
-                    ORDER BY created_at DESC
-                """, (f_initial,))
-                history = cursor.fetchall()
-                
-        else: # tutor
-            cursor.execute("""
-                SELECT * FROM consultation_bookings 
-                WHERE provider_id = %s AND status IN ('Completed', 'Rejected')
-                ORDER BY created_at DESC
-            """, (user_id,))
-            history = cursor.fetchall()
-            
-        return {"success": True, "data": history}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
     finally:
         if cursor: cursor.close()
         if db: db.close()
@@ -347,210 +220,112 @@ def get_consultation_history(user_id: str, role: str):
 # ===================== NOTE SYSTEM =====================
 def evaluate_note_ai(text: str):
     return {
-        "score": random.randint(60, 95),
-        "completeness": random.randint(60, 95),
-        "keyword_coverage": random.randint(60, 95),
-        "clarity": random.randint(60, 95),
-        "formatting": random.randint(60, 95),
-        "feedback": "Good structure but needs more key definitions"
+        "score": random.randint(60, 95), "completeness": random.randint(60, 95),
+        "keyword_coverage": random.randint(60, 95), "clarity": random.randint(60, 95),
+        "formatting": random.randint(60, 95), "feedback": "Good structure but needs more key definitions"
     }
 
 @app.post("/api/notes/upload")
-async def upload_note(
-    title: str = Form(...),
-    description: str = Form(...),
-    course: str = Form(...),
-    uploader_id: str = Form(...),
-    file: UploadFile = File(...)
-):
+async def upload_note(title: str = Form(...), description: str = Form(...), course: str = Form(...), uploader_id: str = Form(...), file: UploadFile = File(...)):
     db = cursor = None
     try:
         file_location = os.path.join(UPLOAD_DIR, file.filename)
-        with open(file_location, "wb") as f:
-            shutil.copyfileobj(file.file, f)
-
+        with open(file_location, "wb") as f: shutil.copyfileobj(file.file, f)
         ai_result = evaluate_note_ai(description)
-
         db = get_db()
         cursor = db.cursor()
-
         cursor.execute("""
-            INSERT INTO note 
-            (title, description, course, file_path, filename, file_size, uploaded_by,
-             ai_score, completeness, keyword_coverage, clarity, formatting, feedback)
+            INSERT INTO note (title, description, course, file_path, filename, file_size, uploaded_by, ai_score, completeness, keyword_coverage, clarity, formatting, feedback)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-        """, (
-            title, description, course, file_location, file.filename,
-            os.path.getsize(file_location), uploader_id,
-            ai_result["score"], ai_result["completeness"], ai_result["keyword_coverage"],
-            ai_result["clarity"], ai_result["formatting"], ai_result["feedback"]
-        ))
-
+        """, (title, description, course, file_location, file.filename, os.path.getsize(file_location), uploader_id, ai_result["score"], ai_result["completeness"], ai_result["keyword_coverage"], ai_result["clarity"], ai_result["formatting"], ai_result["feedback"]))
         db.commit()
-
-        return {
-            "success": True,
-            "message": "Note uploaded + AI evaluated",
-            "ai_score": ai_result["score"]
-        }
-
-    except Exception as e:
-        return json_error(str(e))
+        return {"success": True, "message": "Note uploaded + AI evaluated", "ai_score": ai_result["score"]}
+    except Exception as e: return json_error(str(e))
     finally:
         if cursor: cursor.close()
         if db: db.close()
 
-@app.get("/api/notes/all")
-def get_all_notes():
-    db = cursor = None
-    try:
-        db = get_db()
-        cursor = db.cursor(dictionary=True)
-
-        cursor.execute("""
-            SELECT n.*, u.name AS uploader_name
-            FROM note n
-            JOIN users u ON n.uploaded_by = u.user_id
-            ORDER BY n.created_at DESC
-        """)
-
-        return {"success": True, "notes": cursor.fetchall()}
-
-    finally:
-        if cursor: cursor.close()
-        if db: db.close()
-
-#focus mode session
+# ===================== FOCUS MODE =====================
 @app.post("/save_focus_session")
 def save_focus_session(session: FocusSession):
     db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor()
-        
-        
-        cursor.execute(
-            "INSERT INTO focus_sessions (user_id, duration_seconds) VALUES (%s, %s)",
-            (session.user_id, session.duration_seconds)
-        )
+        cursor.execute("INSERT INTO focus_sessions (user_id, duration_seconds) VALUES (%s, %s)", (session.user_id, session.duration_seconds))
         db.commit()
         return {"success": True, "message": "Focus session saved"}
     except Exception as e:
-        if db: 
-            db.rollback()
+        if db: db.rollback()
         return json_error(str(e))
     finally:
         if cursor: cursor.close()
         if db: db.close()
 
-
 # ===================== SMART STUDY LOAD ANALYZER =====================
-
 @app.post("/api/tasks/add")
 def add_task(task: AcademicTask):
     db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("""
-            INSERT INTO academic_tasks (user_id, title, course_name, task_type, due_date, estimated_hours)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (task.user_id, task.title, task.course_name, task.task_type, task.due_date, task.estimated_hours))
+        cursor.execute("INSERT INTO academic_tasks (user_id, title, course_name, task_type, due_date, estimated_hours) VALUES (%s, %s, %s, %s, %s, %s)", (task.user_id, task.title, task.course_name, task.task_type, task.due_date, task.estimated_hours))
         db.commit()
         return {"success": True, "message": "Task added successfully"}
-    except Exception as e:
-        return json_error(str(e))
+    except Exception as e: return json_error(str(e))
     finally:
         if cursor: cursor.close()
         if db: db.close()
 
-@app.get("/api/study_load/{user_id}")
-def analyze_study_load(user_id: str):
-    db = cursor = None
-    try:
-        db = get_db()
-        cursor = db.cursor(dictionary=True)
-        
-        cursor.execute("""
-            SELECT * FROM academic_tasks 
-            WHERE user_id = %s AND is_completed = FALSE AND due_date >= CURDATE()
-            ORDER BY due_date ASC
-        """, (user_id,))
-        tasks = cursor.fetchall()
-
-        if not tasks:
-            return {"success": True, "message": "No upcoming deadlines. Relax!", "summary": None, "distribution_plan": []}
-
-        today = date.today()
-        total_hours_needed = sum(t["estimated_hours"] for t in tasks)
-        exam_count = sum(1 for t in tasks if t["task_type"] == 'Exam')
-        deadline_count = len(tasks)
-        
-        latest_deadline = max(t["due_date"] for t in tasks)
-        days_available = (latest_deadline - today).days
-        if days_available <= 0: days_available = 1
-
-        daily_hours_recommended = round(total_hours_needed / days_available, 1)
-
-        if daily_hours_recommended > 6 or exam_count >= 2:
-            stress_level = "Critical: High risk of burnout. Focus only on priority items."
-        elif daily_hours_recommended > 3:
-            stress_level = "Moderate: Steady daily effort required."
-        else:
-            stress_level = "Light: Easily manageable workload."
-
-        study_plan = []
-        for task in tasks:
-            days_left = (task["due_date"] - today).days
-            urgency = "High" if days_left <= 3 or task["task_type"] == "Exam" else "Normal"
-            
-            study_plan.append({
-                "task": task["title"],
-                "course": task["course_name"],
-                "type": task["task_type"],
-                "days_left": max(0, days_left),
-                "urgency": urgency,
-                "suggested_action": f"Dedicate {round(task['estimated_hours']/max(1, days_left), 1)} hrs/day starting today."
-            })
-
-        return {
-            "success": True,
-            "summary": {
-                "total_deadlines": deadline_count,
-                "upcoming_exams": exam_count,
-                "total_estimated_hours": total_hours_needed,
-                "recommended_daily_study_hours": daily_hours_recommended,
-                "workload_status": stress_level
-            },
-            "distribution_plan": study_plan
-        }
-    except Exception as e:
-        return json_error(str(e))
-    finally:
-        if cursor: cursor.close()
-        if db: db.close()
-
-# --- NEW: Delete Task Endpoint ---
-@app.delete("/api/tasks/delete")
-def delete_task(user_id: str = Query(...), title: str = Query(...)):
+# ===================== COURSE OUTLINE SYSTEM =====================
+@app.post("/api/courses/update")
+def update_course_outline(course: CourseOutline):
     db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor()
-        # We find the task by user_id and title
-        cursor.execute(
-            "DELETE FROM academic_tasks WHERE user_id = %s AND title = %s",
-            (user_id, title)
-        )
+        query = """
+            INSERT INTO course_outlines (user_id, course_code, course_name, stream, status, credits)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE 
+            status = VALUES(status), course_name = VALUES(course_name), stream = VALUES(stream)
+        """
+        cursor.execute(query, (course.user_id, course.course_code, course.course_name, course.stream, course.status, course.credits))
         db.commit()
-        
-        # Check if anything was actually deleted
-        if cursor.rowcount == 0:
-            return {"success": False, "message": "Task not found"}
-            
-        return {"success": True, "message": "Task deleted successfully"}
-    except Exception as e:
-        return json_error(str(e))
+        return {"success": True, "message": "Course outline updated"}
+    except Exception as e: return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.get("/api/courses/progress/{user_id}")
+def get_course_progress(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM course_outlines WHERE user_id = %s", (user_id,))
+        courses = cursor.fetchall()
+        if not courses:
+            return {"success": True, "completed_count": 0, "remaining_count": 0, "progress_percent": 0, "courses": []}
+        completed = [c for c in courses if c['status'] == 'Completed']
+        percent = round((len(completed) / len(courses)) * 100, 1) if courses else 0
+        return {"success": True, "completed_count": len(completed), "remaining_count": len(courses)-len(completed), "progress_percent": percent, "courses": courses}
+    except Exception as e: return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.post("/api/courses/delete")
+def delete_course_outline(payload: DeleteCourse):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM course_outlines WHERE user_id=%s AND course_code=%s", (payload.user_id, payload.course_code))
+        db.commit()
+        return {"success": True, "message": "Course deleted"}
+    except Exception as e: return json_error(str(e))
     finally:
         if cursor: cursor.close()
         if db: db.close()

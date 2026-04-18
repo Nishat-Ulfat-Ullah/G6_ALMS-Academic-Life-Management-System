@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:alms/pages/my_consultations.dart';
-import 'package:alms/pages/study_dashboard_screen.dart'; // <-- Added new import
+import 'package:alms/pages/study_dashboard_screen.dart';
+import 'package:alms/pages/course_outline_page.dart'; // <-- Added this import
 import 'package:alms/widgets/user_session.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -27,6 +28,20 @@ class AppDrawer extends StatelessWidget {
             onTap: () => Navigator.pushNamed(context, '/mynotespage'),
           ),
           ListTile(
+            leading: const Icon(Icons.school), // Graduation cap icon
+            title: const Text('COURSE OUTLINE'),
+            onTap: () {
+              if (UserSession.userId != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CourseOutlinePage(),
+                  ),
+                );
+              }
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.timer),
             title: const Text('MY CONSULTATIONS'),
             onTap: () {
@@ -51,7 +66,6 @@ class AppDrawer extends StatelessWidget {
             onTap: () => Navigator.pushNamed(context, '/browsenotes'),
           ),
           
-          // --- NEW STUDY LOAD ANALYZER MENU ITEM ---
           ListTile(
             leading: const Icon(Icons.analytics_outlined),
             title: const Text('STUDY LOAD ANALYZER'),
@@ -66,7 +80,6 @@ class AppDrawer extends StatelessWidget {
               }
             },
           ),
-          // -----------------------------------------
 
           ListTile(
             leading: const Icon(Icons.center_focus_strong), 
@@ -76,7 +89,7 @@ class AppDrawer extends StatelessWidget {
                 Navigator.pushNamed(
                   context, 
                   '/focusmode', 
-                  arguments: UserSession.userId!, // Safely use your global session ID here
+                  arguments: UserSession.userId!, 
                 );
               }
             },
