@@ -89,7 +89,20 @@ class AppDrawer extends StatelessWidget {
                 Navigator.pushNamed(
                   context, 
                   '/focusmode', 
-                  arguments: UserSession.userId!, 
+                  arguments: UserSession.userId!,
+                );
+              }
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.center_focus_strong), 
+            title: const Text('Academic Risk Prediction'),
+            onTap: () {
+              if (UserSession.userId != null) {
+                Navigator.pushNamed(
+                  context, 
+                  '/academicrisk', 
+                  arguments: UserSession.userId! 
                 );
               }
             },
