@@ -128,7 +128,6 @@ class NoteCard extends StatelessWidget {
                             ),
                     ),
 
-                    // ================= UPLOADER =================
                     if (note['uploader_name'] != null)
                       Positioned(
                         top: 6,
@@ -152,24 +151,10 @@ class NoteCard extends StatelessWidget {
                         ),
                       ),
 
-                    // ================= SAVE BUTTON =================
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: GestureDetector(
-                        onTap: onToggleSave,
-                        child: Icon(
-                          isSaved ? Icons.bookmark : Icons.bookmark_border,
-                          color: isSaved ? Colors.blue : Colors.white,
-                        ),
-                      ),
-                    ),
-
-                    // ================= AI SCORE =================
                     if (aiScore != null)
                       Positioned(
                         bottom: 6,
-                        right: 6,
+                        left: 6,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
@@ -232,6 +217,18 @@ class NoteCard extends StatelessWidget {
                           size: 14, color: Colors.grey),
                       const SizedBox(width: 4),
                       Text("$comments"),
+
+                      const Spacer(),
+
+                      GestureDetector(
+                        onTap: onToggleSave,
+                        child: Icon(
+                          isSaved
+                              ? Icons.bookmark
+                              : Icons.bookmark_border,
+                          color: isSaved ? Colors.blue : Colors.grey,
+                        ),
+                      ),
                     ],
                   ),
                 ],
