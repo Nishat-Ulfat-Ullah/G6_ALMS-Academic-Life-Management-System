@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:alms/pages/note_preview.dart';
 
 class NoteCard extends StatelessWidget {
   final Map<String, dynamic> note;
@@ -46,7 +47,10 @@ class NoteCard extends StatelessWidget {
 
     return GestureDetector(
       onTap: () {
-        // TODO: open file viewer or AI details later
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => NotePreviewPage(note: note)),
+        );
       },
       child: Container(
         decoration: BoxDecoration(
@@ -76,7 +80,8 @@ class NoteCard extends StatelessWidget {
                 child: Stack(
                   children: [
                     Center(
-                      child: (filename.toLowerCase().endsWith('.jpg') ||
+                      child:
+                          (filename.toLowerCase().endsWith('.jpg') ||
                               filename.toLowerCase().endsWith('.jpeg') ||
                               filename.toLowerCase().endsWith('.png'))
                           ? ClipRRect(
@@ -88,12 +93,8 @@ class NoteCard extends StatelessWidget {
                                 fit: BoxFit.contain,
                                 width: double.infinity,
                                 height: double.infinity,
-                                errorBuilder: (_, _, _) =>
-                                    const Icon(
-                                  Icons.broken_image,
-                                  size: 40,
-                                  color: Colors.grey,
-                                ),
+                                errorBuilder: (_, __, ___) =>
+                                    const Icon(Icons.broken_image, size: 60),
                               ),
                             )
                           : Column(
@@ -103,10 +104,10 @@ class NoteCard extends StatelessWidget {
                                   ext == 'PDF'
                                       ? Icons.picture_as_pdf_rounded
                                       : ext == 'DOC' || ext == 'DOCX'
-                                          ? Icons.description_rounded
-                                          : ext == 'PPT' || ext == 'PPTX'
-                                              ? Icons.slideshow_rounded
-                                              : Icons.insert_drive_file,
+                                      ? Icons.description_rounded
+                                      : ext == 'PPT' || ext == 'PPTX'
+                                      ? Icons.slideshow_rounded
+                                      : Icons.insert_drive_file,
                                   size: 48,
                                   color: color,
                                 ),
@@ -131,7 +132,9 @@ class NoteCard extends StatelessWidget {
                         right: 6,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black54,
                             borderRadius: BorderRadius.circular(4),
@@ -155,13 +158,15 @@ class NoteCard extends StatelessWidget {
                         right: 6,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: aiScore >= 80
                                 ? Colors.green
                                 : aiScore >= 60
-                                    ? Colors.orange
-                                    : Colors.red,
+                                ? Colors.orange
+                                : Colors.red,
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -212,9 +217,7 @@ class NoteCard extends StatelessWidget {
                   GestureDetector(
                     onTap: onToggleSave,
                     child: Icon(
-                      isSaved
-                          ? Icons.bookmark
-                          : Icons.bookmark_border,
+                      isSaved ? Icons.bookmark : Icons.bookmark_border,
                       size: 18,
                       color: isSaved
                           ? const Color.fromARGB(255, 138, 201, 243)
