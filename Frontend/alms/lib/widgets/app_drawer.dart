@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:alms/pages/my_consultations.dart';
-import 'package:alms/pages/study_dashboard_screen.dart'; // <-- Added new import
+import 'package:alms/pages/study_dashboard_screen.dart';
+import 'package:alms/pages/course_outline_page.dart';
 import 'package:alms/widgets/user_session.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -66,6 +67,20 @@ class AppDrawer extends StatelessWidget {
               }
             },
           ),
+          ListTile(
+            leading: const Icon(Icons.school), // Graduation cap icon
+            title: const Text('COURSE OUTLINE'),
+            onTap: () {
+              if (UserSession.userId != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CourseOutlinePage(),
+                  ),
+                );
+              }
+            },
+          ),
           // -----------------------------------------
 
           ListTile(
@@ -76,7 +91,20 @@ class AppDrawer extends StatelessWidget {
                 Navigator.pushNamed(
                   context, 
                   '/focusmode', 
-                  arguments: UserSession.userId!, // Safely use your global session ID here
+                  arguments: UserSession.userId!,
+                );
+              }
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.center_focus_strong), 
+            title: const Text('Academic Risk Prediction'),
+            onTap: () {
+              if (UserSession.userId != null) {
+                Navigator.pushNamed(
+                  context, 
+                  '/academicrisk', 
+                  arguments: UserSession.userId!,
                 );
               }
             },

@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:alms/pages/note_preview.dart';
 
 class NoteCard extends StatelessWidget {
   final Map<String, dynamic> note;
   final bool isSaved;
   final VoidCallback onToggleSave;
+  final VoidCallback? onToggleLike;
+  final Future<void> Function()? onRefresh;
 
   const NoteCard({
     super.key,
     required this.note,
     required this.isSaved,
     required this.onToggleSave,
+    this.onToggleLike,
+    this.onRefresh,
   });
 
   String _ext(String filename) {
@@ -37,16 +42,28 @@ class NoteCard extends StatelessWidget {
     final String filename = (note['filename'] ?? '') as String;
     final String filePath = (note['file_path'] ?? '') as String;
 
-    final int? aiScore = note['ai_score']; // ⭐ AI SCORE ADDED
-
     final String ext = _ext(filename);
     final Color color = _extColor(ext);
 
     final String imageUrl = "http://10.0.2.2:8000/$filePath";
 
+    final int upvotes = note['upvotes'] ?? 0;
+    final int comments = note['comments'] ?? 0;
+
+    final int? aiScore = note['ai_score'];
+
     return GestureDetector(
       onTap: () {
-        // TODO: open file viewer or AI details later
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => NotePreviewPage(note: note),
+          ),
+        ).then((_) async {
+          if (onRefresh != null) {
+            await onRefresh!();
+          }
+        });
       },
       child: Container(
         decoration: BoxDecoration(
@@ -64,7 +81,6 @@ class NoteCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ================= IMAGE =================
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
@@ -88,12 +104,8 @@ class NoteCard extends StatelessWidget {
                                 fit: BoxFit.contain,
                                 width: double.infinity,
                                 height: double.infinity,
-                                errorBuilder: (_, _, _) =>
-                                    const Icon(
-                                  Icons.broken_image,
-                                  size: 40,
-                                  color: Colors.grey,
-                                ),
+                                errorBuilder: (_, __, ___) =>
+                                    const Icon(Icons.broken_image, size: 40),
                               ),
                             )
                           : Column(
@@ -101,29 +113,20 @@ class NoteCard extends StatelessWidget {
                               children: [
                                 Icon(
                                   ext == 'PDF'
-                                      ? Icons.picture_as_pdf_rounded
+                                      ? Icons.picture_as_pdf
                                       : ext == 'DOC' || ext == 'DOCX'
-                                          ? Icons.description_rounded
+                                          ? Icons.description
                                           : ext == 'PPT' || ext == 'PPTX'
-                                              ? Icons.slideshow_rounded
+                                              ? Icons.slideshow
                                               : Icons.insert_drive_file,
                                   size: 48,
                                   color: color,
                                 ),
                                 const SizedBox(height: 6),
-                                Text(
-                                  ext,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: color,
-                                  ),
-                                ),
+                                Text(ext),
                               ],
                             ),
                     ),
-
-                    // ================= UPLOADER NAME =================
                     if (note['uploader_name'] != null)
                       Positioned(
                         top: 6,
@@ -142,17 +145,14 @@ class NoteCard extends StatelessWidget {
                               color: Colors.white,
                               fontSize: 9,
                             ),
-                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ),
-
-                    // ================= AI SCORE BADGE =================
                     if (aiScore != null)
                       Positioned(
                         bottom: 6,
-                        right: 6,
+                        left: 6,
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
@@ -178,48 +178,54 @@ class NoteCard extends StatelessWidget {
                 ),
               ),
             ),
-
-            // ================= TITLE + COURSE =================
             Padding(
               padding: const EdgeInsets.all(8),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          note['title'] ?? '',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          note['course'] ?? '',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    note['title'] ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    note['course'] ?? '',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey,
                     ),
                   ),
-
-                  // ================= SAVE BUTTON =================
-                  GestureDetector(
-                    onTap: onToggleSave,
-                    child: Icon(
-                      isSaved
-                          ? Icons.bookmark
-                          : Icons.bookmark_border,
-                      size: 18,
-                      color: isSaved
-                          ? const Color.fromARGB(255, 138, 201, 243)
-                          : Colors.grey,
-                    ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: onToggleLike,
+                        child: Icon(
+                          Icons.thumb_up_alt,
+                          size: 14,
+                          color: note['is_liked'] == true
+                              ? Colors.blue
+                              : Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text("$upvotes"),
+                      const SizedBox(width: 12),
+                      const Icon(Icons.comment,
+                          size: 14, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text("$comments"),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: onToggleSave,
+                        child: Icon(
+                          isSaved
+                              ? Icons.bookmark
+                              : Icons.bookmark_border,
+                          color: isSaved ? Colors.blue : Colors.grey,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
