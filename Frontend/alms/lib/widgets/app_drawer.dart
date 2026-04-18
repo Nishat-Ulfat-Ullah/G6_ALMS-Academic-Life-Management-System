@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:alms/pages/my_consultations.dart';
 import 'package:alms/pages/study_dashboard_screen.dart';
-import 'package:alms/pages/course_outline_page.dart'; // <-- Added this import
+import 'package:alms/pages/course_outline_page.dart';
 import 'package:alms/widgets/user_session.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -80,6 +80,21 @@ class AppDrawer extends StatelessWidget {
               }
             },
           ),
+          ListTile(
+            leading: const Icon(Icons.school), // Graduation cap icon
+            title: const Text('COURSE OUTLINE'),
+            onTap: () {
+              if (UserSession.userId != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CourseOutlinePage(),
+                  ),
+                );
+              }
+            },
+          ),
+          // -----------------------------------------
 
           ListTile(
             leading: const Icon(Icons.center_focus_strong), 

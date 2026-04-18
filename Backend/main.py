@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, field_validator
@@ -627,15 +627,17 @@ def save_focus_session(session: FocusSession):
         db = get_db()
         cursor = db.cursor()
 
-        cursor.execute("""
-            INSERT IGNORE INTO saved_notes (user_id, note_id)
-            VALUES (%s, %s)
-        """, (payload.user_id, payload.note_id))
 
-        cursor.execute("INSERT INTO focus_sessions (user_id, duration_seconds) VALUES (%s, %s)", (session.user_id, session.duration_seconds))
+        cursor.execute(
+            "INSERT INTO focus_sessions (user_id, duration_seconds) VALUES (%s, %s)",
+            (session.user_id, session.duration_seconds)
+        )
         db.commit()
-        return {"success": True, "message": "Saved"}
-
+        return {"success": True, "message": "Focus session saved"}
+    except Exception as e:
+        if db: 
+            db.rollback()
+        return json_error(str(e))
     finally:
         if cursor: cursor.close()
         if db: db.close()
@@ -713,6 +715,96 @@ def add_task(task: AcademicTask):
     finally:
         if cursor: cursor.close()
         if db: db.close()
+
+@app.get("/api/study_load/{user_id}")
+def analyze_study_load(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT * FROM academic_tasks 
+            WHERE user_id = %s AND is_completed = FALSE AND due_date >= CURDATE()
+            ORDER BY due_date ASC
+        """, (user_id,))
+        tasks = cursor.fetchall()
+
+        if not tasks:
+            return {"success": True, "message": "No upcoming deadlines. Relax!", "summary": None, "distribution_plan": []}
+
+        today = date.today()
+        total_hours_needed = sum(t["estimated_hours"] for t in tasks)
+        exam_count = sum(1 for t in tasks if t["task_type"] == 'Exam')
+        deadline_count = len(tasks)
+
+        latest_deadline = max(t["due_date"] for t in tasks)
+        days_available = (latest_deadline - today).days
+        if days_available <= 0: days_available = 1
+
+        daily_hours_recommended = round(total_hours_needed / days_available, 1)
+
+        if daily_hours_recommended > 6 or exam_count >= 2:
+            stress_level = "Critical: High risk of burnout. Focus only on priority items."
+        elif daily_hours_recommended > 3:
+            stress_level = "Moderate: Steady daily effort required."
+        else:
+            stress_level = "Light: Easily manageable workload."
+
+        study_plan = []
+        for task in tasks:
+            days_left = (task["due_date"] - today).days
+            urgency = "High" if days_left <= 3 or task["task_type"] == "Exam" else "Normal"
+
+            study_plan.append({
+                "task": task["title"],
+                "course": task["course_name"],
+                "type": task["task_type"],
+                "days_left": max(0, days_left),
+                "urgency": urgency,
+                "suggested_action": f"Dedicate {round(task['estimated_hours']/max(1, days_left), 1)} hrs/day starting today."
+            })
+        return {
+            "success": True,
+            "summary": {
+                "total_deadlines": deadline_count,
+                "upcoming_exams": exam_count,
+                "total_estimated_hours": total_hours_needed,
+                "recommended_daily_study_hours": daily_hours_recommended,
+                "workload_status": stress_level
+            },
+            "distribution_plan": study_plan
+        }
+    except Exception as e:
+        return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.delete("/api/tasks/delete")
+def delete_task(user_id: str = Query(...), title: str = Query(...)):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        # We find the task by user_id and title
+        cursor.execute(
+            "DELETE FROM academic_tasks WHERE user_id = %s AND title = %s",
+            (user_id, title)
+        )
+        db.commit()
+        if cursor.rowcount == 0:
+            return {"success": False, "message": "Task not found"}
+
+        return {"success": True, "message": "Task deleted successfully"}
+    except Exception as e:
+        return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
 
 # ===================== COURSE OUTLINE SYSTEM =====================
 @app.post("/api/courses/update")
@@ -809,44 +901,6 @@ def get_course_progress(user_id: str):
     try:
         db = get_db()
         cursor = db.cursor(dictionary=True)
-
-        cursor.execute("""
-            SELECT 
-                n.note_id,
-                n.title,
-                n.description,
-                n.course,
-                n.file_path,
-                n.filename,
-                n.file_size,
-                n.uploaded_by,
-                n.created_at,
-                n.ai_score,
-                n.completeness,
-                n.keyword_coverage,
-                n.clarity,
-                n.formatting,
-                n.feedback,
-
-                (SELECT COUNT(*) FROM note_upvotes u WHERE u.note_id = n.note_id) AS upvotes,
-                (SELECT COUNT(*) FROM note_comments c WHERE c.note_id = n.note_id) AS comments,
-
-                EXISTS(
-                    SELECT 1 FROM note_upvotes u2 
-                    WHERE u2.note_id = n.note_id AND u2.user_id = %s
-                ) AS isLiked
-
-            FROM note n
-            JOIN saved_notes s ON n.note_id = s.note_id
-            WHERE s.user_id = %s
-            ORDER BY s.id DESC
-        """, (user_id, user_id))
-
-        return {
-            "success": True,
-            "notes": cursor.fetchall()
-        }
-
         cursor.execute("SELECT * FROM course_outlines WHERE user_id = %s", (user_id,))
         courses = cursor.fetchall()
         if not courses:
@@ -858,6 +912,23 @@ def get_course_progress(user_id: str):
     finally:
         if cursor: cursor.close()
         if db: db.close()
+
+@app.post("/api/courses/delete")
+def delete_course_outline(payload: DeleteCourse):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM course_outlines WHERE user_id=%s AND course_code=%s", (payload.user_id, payload.course_code))
+        db.commit()
+        return {"success": True, "message": "Course deleted"}
+    except Exception as e: return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
 
         
 # ===================== Upvote System =====================
