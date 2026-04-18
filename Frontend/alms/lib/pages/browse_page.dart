@@ -29,8 +29,9 @@ void initState() {
   _loadAll().then((_) => _fetchSaved());
 }
 
-Future<void> _loadAll() =>
-    Future.wait([_fetchNotes()]);
+Future<void> _loadAll() async {
+  await _fetchNotes();
+}
 
 Future<void> _fetchNotes() async {
   try {

@@ -366,7 +366,11 @@ def get_saved_notes(user_id: str):
         cursor = db.cursor(dictionary=True)
 
         cursor.execute("""
-            SELECT note_id FROM saved_notes WHERE user_id=%s
+            SELECT n.*
+            FROM note n
+            JOIN saved_notes s ON n.note_id = s.note_id
+            WHERE s.user_id = %s
+            ORDER BY s.id DESC
         """, (user_id,))
 
         return {
