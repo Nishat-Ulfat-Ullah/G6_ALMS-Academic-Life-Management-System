@@ -1,21 +1,23 @@
-from fastapi import FastAPI, UploadFile, File, Form, Query
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
-from typing import Dict, List, Optional
+from typing import Dict, List
 from datetime import date, timedelta
+
 import mysql.connector
 import os
 import shutil
 import uvicorn
-import random
-
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app = FastAPI()
 
+
+from fastapi.staticfiles import StaticFiles
+
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,7 +32,6 @@ class User(BaseModel):
     name: str
     email: str
     password: str
-    
     @field_validator('email')
     @classmethod
     def validate_email(cls, v):
@@ -56,6 +57,7 @@ class Consultation(BaseModel):
     day: str
     time_slot: str
 
+
 class Faculty(BaseModel):
     f_id: str
     f_name: str
@@ -66,8 +68,6 @@ class SaveNote(BaseModel):
     user_id: str
     note_id: int
 
-
-#------ Nishat --------
 class SaveRoutine(BaseModel):
     provider_id: str
     routine: Dict[str, List[str]]
@@ -127,9 +127,20 @@ class AcademicTask(BaseModel):
 class TaskComplete(BaseModel):
     task_id: int
 
+class CourseOutline(BaseModel):
+    user_id: str
+    course_code: str
+    course_name: str
+    stream: str
+    status: str
+    credits: int = 3
 
+class DeleteCourse(BaseModel):
+    user_id: str
+    course_code: str
 
 # ===================== HELPERS =====================
+
 def json_error(message: str, code: int = 400):
     return JSONResponse(content={"success": False, "error": message}, status_code=code)
 
@@ -188,6 +199,7 @@ def login(user: LoginUser):
         if cursor: cursor.close()
         if db: db.close()
 
+
 @app.get("/role/{user_id}")
 def check_role(user_id: str):
     db = cursor = None
@@ -229,8 +241,8 @@ def check_role(user_id: str):
         if cursor: cursor.close()
         if db: db.close()
 
+# ===================== Consultations SYSTEM =====================
 
-# ===================== CONSULTATIONS SYSTEM (Nishat) =====================
 @app.post("/save_routine")
 def save_routine(payload: SaveRoutine):
     db = cursor = None
@@ -491,7 +503,13 @@ def book_consultation(req: BookingRequest):
         if db: db.close()
 
 # ===================== NOTE SYSTEM =====================
+
+ # ===================== Note System =====================
+
+import random
+
 def evaluate_note_ai(text: str):
+
     return {
         "score": random.randint(60, 95),
         "completeness": random.randint(60, 95),
@@ -515,6 +533,7 @@ async def upload_note(
         with open(file_location, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
+        # ================= AI STEP =================
         ai_result = evaluate_note_ai(description)
 
         db = get_db()
@@ -526,10 +545,20 @@ async def upload_note(
              ai_score, completeness, keyword_coverage, clarity, formatting, feedback)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (
-            title, description, course, file_location, file.filename,
-            os.path.getsize(file_location), uploader_id,
-            ai_result["score"], ai_result["completeness"], ai_result["keyword_coverage"],
-            ai_result["clarity"], ai_result["formatting"], ai_result["feedback"]
+            title,
+            description,
+            course,
+            file_location,
+            file.filename,
+            os.path.getsize(file_location),
+            uploader_id,
+
+            ai_result["score"],
+            ai_result["completeness"],
+            ai_result["keyword_coverage"],
+            ai_result["clarity"],
+            ai_result["formatting"],
+            ai_result["feedback"]
         ))
 
         db.commit()
@@ -546,25 +575,73 @@ async def upload_note(
         if cursor: cursor.close()
         if db: db.close()
 
-@app.get("/api/notes/all")
-def get_all_notes():
+@app.get("/api/notes/all/{user_id}")
+def get_all_notes(user_id: str):
     db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor(dictionary=True)
 
         cursor.execute("""
-            SELECT n.*, u.name AS uploader_name
+            SELECT 
+                n.note_id,
+                n.title,
+                n.description,
+                n.course,
+                n.file_path,
+                n.filename,
+                n.file_size,
+                n.uploaded_by,
+                n.created_at,
+                n.ai_score,
+                n.completeness,
+                n.keyword_coverage,
+                n.clarity,
+                n.formatting,
+                n.feedback,
+                u.name AS uploader_name,
+
+                (SELECT COUNT(*) FROM note_upvotes u WHERE u.note_id = n.note_id) AS upvotes,
+                (SELECT COUNT(*) FROM note_comments c WHERE c.note_id = n.note_id) AS comments,
+
+                EXISTS(
+                    SELECT 1 FROM note_upvotes u2 
+                    WHERE u2.note_id = n.note_id AND u2.user_id = %s
+                ) AS isLiked
+
             FROM note n
             JOIN users u ON n.uploaded_by = u.user_id
             ORDER BY n.created_at DESC
-        """)
+        """, (user_id,))
 
-        return {"success": True, "notes": cursor.fetchall()}
+        return {
+            "success": True,
+            "notes": cursor.fetchall()
+        }
 
     finally:
         if cursor: cursor.close()
         if db: db.close()
+
+@app.post("/api/notes/save")
+def save_note(payload: SaveNote):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+
+        cursor.execute("""
+            INSERT IGNORE INTO saved_notes (user_id, note_id)
+            VALUES (%s, %s)
+        """, (payload.user_id, payload.note_id))
+
+        db.commit()
+        return {"success": True, "message": "Saved"}
+
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
 
 #focus mode session
 @app.post("/save_focus_session")
@@ -657,108 +734,217 @@ def add_task(task: AcademicTask):
     try:
         db = get_db()
         cursor = db.cursor()
-        cursor.execute("""
-            INSERT INTO academic_tasks (user_id, title, course_name, task_type, due_date, estimated_hours)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (task.user_id, task.title, task.course_name, task.task_type, task.due_date, task.estimated_hours))
+        cursor.execute("INSERT INTO academic_tasks (user_id, title, course_name, task_type, due_date, estimated_hours) VALUES (%s, %s, %s, %s, %s, %s)", (task.user_id, task.title, task.course_name, task.task_type, task.due_date, task.estimated_hours))
         db.commit()
         return {"success": True, "message": "Task added successfully"}
-    except Exception as e:
-        return json_error(str(e))
+    except Exception as e: return json_error(str(e))
     finally:
         if cursor: cursor.close()
         if db: db.close()
 
-@app.get("/api/study_load/{user_id}")
-def analyze_study_load(user_id: str):
-    db = cursor = None
-    try:
-        db = get_db()
-        cursor = db.cursor(dictionary=True)
-        
-        cursor.execute("""
-            SELECT * FROM academic_tasks 
-            WHERE user_id = %s AND is_completed = FALSE AND due_date >= CURDATE()
-            ORDER BY due_date ASC
-        """, (user_id,))
-        tasks = cursor.fetchall()
-
-        if not tasks:
-            return {"success": True, "message": "No upcoming deadlines. Relax!", "summary": None, "distribution_plan": []}
-
-        today = date.today()
-        total_hours_needed = sum(t["estimated_hours"] for t in tasks)
-        exam_count = sum(1 for t in tasks if t["task_type"] == 'Exam')
-        deadline_count = len(tasks)
-        
-        latest_deadline = max(t["due_date"] for t in tasks)
-        days_available = (latest_deadline - today).days
-        if days_available <= 0: days_available = 1
-
-        daily_hours_recommended = round(total_hours_needed / days_available, 1)
-
-        if daily_hours_recommended > 6 or exam_count >= 2:
-            stress_level = "Critical: High risk of burnout. Focus only on priority items."
-        elif daily_hours_recommended > 3:
-            stress_level = "Moderate: Steady daily effort required."
-        else:
-            stress_level = "Light: Easily manageable workload."
-
-        study_plan = []
-        for task in tasks:
-            days_left = (task["due_date"] - today).days
-            urgency = "High" if days_left <= 3 or task["task_type"] == "Exam" else "Normal"
-            
-            study_plan.append({
-                "task": task["title"],
-                "course": task["course_name"],
-                "type": task["task_type"],
-                "days_left": max(0, days_left),
-                "urgency": urgency,
-                "suggested_action": f"Dedicate {round(task['estimated_hours']/max(1, days_left), 1)} hrs/day starting today."
-            })
-
-        return {
-            "success": True,
-            "summary": {
-                "total_deadlines": deadline_count,
-                "upcoming_exams": exam_count,
-                "total_estimated_hours": total_hours_needed,
-                "recommended_daily_study_hours": daily_hours_recommended,
-                "workload_status": stress_level
-            },
-            "distribution_plan": study_plan
-        }
-    except Exception as e:
-        return json_error(str(e))
-    finally:
-        if cursor: cursor.close()
-        if db: db.close()
-
-# --- NEW: Delete Task Endpoint ---
-@app.delete("/api/tasks/delete")
-def delete_task(user_id: str = Query(...), title: str = Query(...)):
+@app.post("/api/notes/unsave")
+def unsave_note(payload: SaveNote):
     db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor()
-        # We find the task by user_id and title
-        cursor.execute(
-            "DELETE FROM academic_tasks WHERE user_id = %s AND title = %s",
-            (user_id, title)
-        )
+
+        cursor.execute("""
+            DELETE FROM saved_notes
+            WHERE user_id=%s AND note_id=%s
+        """, (payload.user_id, payload.note_id))
+
         db.commit()
-        
-        # Check if anything was actually deleted
-        if cursor.rowcount == 0:
-            return {"success": False, "message": "Task not found"}
-            
-        return {"success": True, "message": "Task deleted successfully"}
-    except Exception as e:
-        return json_error(str(e))
+        return {"success": True, "message": "Unsaved"}
+
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+
+@app.get("/api/notes/saved/{user_id}")
+def get_saved_notes(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT 
+                n.note_id,
+                n.title,
+                n.description,
+                n.course,
+                n.file_path,
+                n.filename,
+                n.file_size,
+                n.uploaded_by,
+                n.created_at,
+                n.ai_score,
+                n.completeness,
+                n.keyword_coverage,
+                n.clarity,
+                n.formatting,
+                n.feedback,
+
+                (SELECT COUNT(*) FROM note_upvotes u WHERE u.note_id = n.note_id) AS upvotes,
+                (SELECT COUNT(*) FROM note_comments c WHERE c.note_id = n.note_id) AS comments,
+
+                EXISTS(
+                    SELECT 1 FROM note_upvotes u2 
+                    WHERE u2.note_id = n.note_id AND u2.user_id = %s
+                ) AS isLiked
+
+            FROM note n
+            JOIN saved_notes s ON n.note_id = s.note_id
+            WHERE s.user_id = %s
+            ORDER BY s.id DESC
+        """, (user_id, user_id))
+
+        return {
+            "success": True,
+            "notes": cursor.fetchall()
+        }
+
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+
+# ===================== COURSE OUTLINE SYSTEM =====================
+@app.post("/api/courses/update")
+def update_course_outline(course: CourseOutline):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        query = """
+            INSERT INTO course_outlines (user_id, course_code, course_name, stream, status, credits)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE 
+            status = VALUES(status), course_name = VALUES(course_name), stream = VALUES(stream)
+        """
+        cursor.execute(query, (course.user_id, course.course_code, course.course_name, course.stream, course.status, course.credits))
+        db.commit()
+        return {"success": True, "message": "Course outline updated"}
+    except Exception as e: return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.get("/api/courses/progress/{user_id}")
+def get_course_progress(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM course_outlines WHERE user_id = %s", (user_id,))
+        courses = cursor.fetchall()
+        if not courses:
+            return {"success": True, "completed_count": 0, "remaining_count": 0, "progress_percent": 0, "courses": []}
+        completed = [c for c in courses if c['status'] == 'Completed']
+        percent = round((len(completed) / len(courses)) * 100, 1) if courses else 0
+        return {"success": True, "completed_count": len(completed), "remaining_count": len(courses)-len(completed), "progress_percent": percent, "courses": courses}
+    except Exception as e: return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.post("/api/courses/delete")
+def delete_course_outline(payload: DeleteCourse):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM course_outlines WHERE user_id=%s AND course_code=%s", (payload.user_id, payload.course_code))
+        db.commit()
+        return {"success": True, "message": "Course deleted"}
+    except Exception as e: return json_error(str(e))
     finally:
         if cursor: cursor.close()
         if db: db.close()
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+        
+# ===================== Upvote System =====================
+@app.post("/api/notes/upvote")
+def toggle_upvote(data: dict):
+    db = get_db()
+    cursor = db.cursor()
+
+    note_id = data["note_id"]
+    user_id = data["user_id"]
+
+    cursor.execute(
+        "SELECT * FROM note_upvotes WHERE note_id=%s AND user_id=%s",
+        (note_id, user_id)
+    )
+    existing = cursor.fetchone()
+
+    if existing:
+        cursor.execute(
+            "DELETE FROM note_upvotes WHERE note_id=%s AND user_id=%s",
+            (note_id, user_id)
+        )
+        db.commit()
+        return {"liked": False}
+    else:
+        cursor.execute(
+            "INSERT INTO note_upvotes (note_id, user_id) VALUES (%s, %s)",
+            (note_id, user_id)
+        )
+        db.commit()
+        return {"liked": True}
+    
+
+@app.get("/api/notes/upvotes/{note_id}")
+def get_upvotes(note_id: int):
+    db = get_db()
+    cursor = db.cursor()
+
+    cursor.execute(
+        "SELECT COUNT(*) FROM note_upvotes WHERE note_id=%s",
+        (note_id,)
+    )
+
+    count = cursor.fetchone()[0]
+    return {"count": count}
+
+
+# ===================== Comment System =====================
+
+@app.post("/api/notes/comment")
+def add_comment(data: dict):
+    db = get_db()
+    cursor = db.cursor()
+
+    cursor.execute("""
+        INSERT INTO note_comments (note_id, user_id, comment)
+        VALUES (%s, %s, %s)
+    """, (
+        data["note_id"],
+        data["user_id"],
+        data["comment"]
+    ))
+
+    db.commit()
+    return {"success": True}
+
+@app.get("/api/notes/comments/{note_id}")
+def get_comments(note_id: int):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT 
+            note_comments.comment,
+            note_comments.created_at,
+            users.name AS user_name
+        FROM note_comments
+        JOIN users ON note_comments.user_id = users.user_id
+        WHERE note_comments.note_id=%s
+        ORDER BY note_comments.created_at DESC
+    """, (note_id,))
+
+    return {"comments": cursor.fetchall()}
