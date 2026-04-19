@@ -613,11 +613,12 @@ def get_academic_risk(user_id: str):
         att_rate = stats["attendance_count"] / stats["total_classes"]
         
         # Risk points
-        att_risk = 40 if att_rate < 0.75 else 0
-        cgpa_risk = 30 if float(stats["cgpa"]) < 3.0 else 0
-        deadline_risk = min(stats["missed_deadlines"] * 15, 30) # Max 30 points
+        att_risk = 25 if att_rate < 0.75 else 0
+        cgpa_risk = 25 if float(stats["cgpa"]) < 3.0 else 0
+        deadline_risk = min(stats["missed_deadlines"] * 12.5, 25)
+        quiz_risk = min(stats["low_quizzes"] * 12.5, 25)
         
-        total_score = att_risk + cgpa_risk + deadline_risk
+        total_score = att_risk + cgpa_risk + deadline_risk + quiz_risk
 
         if total_score >= 70:
             zone, suggestion = "High", "Critical risk: Please consult your faculty advisor."
@@ -647,7 +648,7 @@ def get_academic_risk(user_id: str):
         if cursor: cursor.close()
         if db: db.close()
 
-        
+
 # ===================== SMART STUDY LOAD ANALYZER =====================
 
 @app.post("/api/tasks/add")
