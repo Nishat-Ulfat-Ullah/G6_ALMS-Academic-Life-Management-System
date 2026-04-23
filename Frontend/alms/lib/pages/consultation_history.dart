@@ -97,12 +97,33 @@ class _ConsultationHistoryState extends State<ConsultationHistory> {
   }
 }
 
-// Read-only Card for History
+// Read-only Card for History with Clickable Summary Popup
 class HistoryCard extends StatelessWidget {
   final Map<dynamic, dynamic> data;
   final String userRole;
 
   const HistoryCard({super.key, required this.data, required this.userRole});
+
+  void _showSummaryDialog(BuildContext context, String? summary) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Consultation Summary", style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text(
+          summary != null && summary.isNotEmpty 
+            ? summary 
+            : "No summary provided for this consultation.",
+          style: const TextStyle(fontSize: 16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Close", style: TextStyle(fontSize: 16)),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -112,29 +133,49 @@ class HistoryCard extends StatelessWidget {
     String personLabel = userRole == 'student' ? 'Faculty' : 'Student';
     String personName = userRole == 'student' ? data['provider_id'] : data['student_id'];
 
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE4F5FD),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.black, width: 1.2),
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, offset: Offset(0, 4), blurRadius: 4),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildInfoRow('Course', data['course_name'], isValueBold: true),
-          const SizedBox(height: 12),
-          _buildInfoRow(personLabel, personName),
-          const SizedBox(height: 12),
-          _buildInfoRow('Time', data['time_slot']),
-          const SizedBox(height: 12),
-          _buildInfoRow('Day', data['day_of_week']),
-          const SizedBox(height: 12),
-          _buildInfoRow('Status', currentStatus, valueColor: statusColor),
-        ],
+    return InkWell(
+      onTap: () {
+        // Only show the summary popup if it was completed
+        if (currentStatus == 'Completed') {
+          _showSummaryDialog(context, data['summary']?.toString());
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No summary available for rejected consultations.')),
+          );
+        }
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(16.0),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE4F5FD),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.black, width: 1.2),
+          boxShadow: const [
+            BoxShadow(color: Colors.black12, offset: Offset(0, 4), blurRadius: 4),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildInfoRow('Course', data['course_name'], isValueBold: true),
+            const SizedBox(height: 12),
+            _buildInfoRow(personLabel, personName),
+            const SizedBox(height: 12),
+            _buildInfoRow('Time', data['time_slot']),
+            const SizedBox(height: 12),
+            _buildInfoRow('Day', data['day_of_week']),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: _buildInfoRow('Status', currentStatus, valueColor: statusColor)),
+                if (currentStatus == 'Completed') 
+                  const Icon(Icons.info_outline, color: Colors.blueGrey, size: 20),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
