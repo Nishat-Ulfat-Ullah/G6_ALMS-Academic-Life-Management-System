@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'dart:io';
 
 class CourseOutlineService {
-  final String baseUrl = "http://10.0.2.2:8000";
+  final String baseUrl = Platform.isAndroid ? "http://10.0.2.2:8000" : "http://localhost:8000";
 
   Future<bool> updateCourse(Map<String, dynamic> courseData) async {
     try {
