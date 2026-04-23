@@ -65,7 +65,7 @@ class _AcademicRiskScreenState extends State<AcademicRiskScreen> {
             // Optional: Background image pattern if you have the asset
             decoration: const BoxDecoration(
               image: DecorationImage(
-                image: AssetImage("assets/pattern_bg.png"), // Ensure this is in pubspec if used
+                image: AssetImage("assets/bg.png"), // Ensure this is in pubspec if used
                 opacity: 0.05,
                 fit: BoxFit.cover,
               ),
