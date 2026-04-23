@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, field_validator
 from typing import Dict, List
 from datetime import date, timedelta
-
+from typing import Optional
 import mysql.connector
 import os
 import shutil
@@ -72,9 +72,10 @@ class SaveRoutine(BaseModel):
     provider_id: str
     routine: Dict[str, List[str]]
 
-class UpdateStatus(BaseModel):
+class UpdateStatusRequest(BaseModel):
     booking_id: int
     status: str
+    summary: Optional[str] = None
 
 class RoutineItem(BaseModel):
     day_of_week: str
@@ -326,25 +327,36 @@ def get_my_consultations(user_id: str, role: str):
 
 
 @app.post("/update_consultation_status")
-def update_consultation_status(payload: UpdateStatus):
+def update_consultation_status(req: UpdateStatusRequest):
     db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor()
         
-        cursor.execute(
-            "UPDATE consultation_bookings SET status = %s WHERE booking_id = %s",
-            (payload.status, payload.booking_id)
-        )
+        # If it's Completed and has a summary, update both status and summary
+        if req.status == 'Completed' and req.summary is not None:
+            cursor.execute("""
+                UPDATE consultation_bookings 
+                SET status = %s, summary = %s 
+                WHERE booking_id = %s
+            """, (req.status, req.summary, req.booking_id))
+        else:
+            # Otherwise, just update the status (for Accepted/Rejected)
+            cursor.execute("""
+                UPDATE consultation_bookings 
+                SET status = %s 
+                WHERE booking_id = %s
+            """, (req.status, req.booking_id))
+            
         db.commit()
-        return {"success": True, "message": f"Status updated to {payload.status}"}
+        return {"success": True, "message": f"Status updated to {req.status}"}
     except Exception as e:
         if db: db.rollback()
-        # Replaced json_error to ensure it returns cleanly 
         return {"success": False, "error": str(e)}
     finally:
         if cursor: cursor.close()
         if db: db.close()
+
 
 @app.get("/consultation_history/{user_id}")
 def get_consultation_history(user_id: str, role: str):
