@@ -1,14 +1,20 @@
-from fastapi import FastAPI, UploadFile, File, Form, Query
+from fastapi import FastAPI, UploadFile, File, Form, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, field_validator
 from typing import Dict, List
 from datetime import date, timedelta
 from typing import Optional
+from pytrends.request import TrendReq
+from curriculam_map import CURRICULUM_MAP
+
+import requests
+import xml.etree.ElementTree as ET
 import mysql.connector
 import os
 import shutil
 import uvicorn
+
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app = FastAPI()
@@ -139,6 +145,11 @@ class CourseOutline(BaseModel):
 class DeleteCourse(BaseModel):
     user_id: str
     course_code: str
+#THESIS
+class UserInterest(BaseModel):
+    user_id: str
+    interests: List[str]
+
 
 # ===================== HELPERS =====================
 
@@ -1050,3 +1061,108 @@ def get_comments(note_id: int):
     """, (note_id,))
 
     return {"comments": cursor.fetchall()}
+
+
+# ===================== THESIS RECOMMENDER SYSTEM =====================
+
+# --- THE SCRAPER  ---
+def fetch_real_research_from_arxiv(interest_tags):
+    if not interest_tags:
+        interest_tags = ["Computer Science"]
+        
+    search_query = "+OR+".join([f"all:{tag.replace(' ', '+')}" for tag in interest_tags])
+    url = f"http://export.arxiv.org/api/query?search_query={search_query}&start=0&max_results=12&sortBy=submittedDate&sortOrder=descending"
+    
+    try:
+        response = requests.get(url, timeout=10)
+        root = ET.fromstring(response.content)
+        recommendations = []
+        ns = {'atom': 'http://www.w3.org/2005/Atom', 'arxiv': 'http://arxiv.org/schemas/atom'}
+
+        for entry in root.findall('atom:entry', ns):
+            title = entry.find('atom:title', ns).text.replace('\n', ' ').strip()
+            
+            # Find the category
+            category_node = entry.find('arxiv:primary_category', ns)
+            category = category_node.attrib['term'] if category_node is not None else "cs.GL"
+            
+            # IMPROVED LINK LOGIC:
+            # Look for the PDF link specifically
+            link = None
+            for link_tag in entry.findall('atom:link', ns):
+                if link_tag.get('title') == 'pdf':
+                    link = link_tag.get('href')
+                    break
+            
+            # Fallback to the general ArXiv ID link if PDF link isn't found
+            if not link:
+                id_node = entry.find('atom:id', ns)
+                link = id_node.text if id_node is not None else "https://arxiv.org"
+
+            recommendations.append({
+                "topic": title,
+                "domain": category,
+                "match_percentage": 92, 
+                "url": link
+            })
+        return recommendations
+    except Exception as e:
+        print(f"Scraper Error: {e}")
+        return []
+
+# --- ENDPOINTS ---
+
+@app.post("/api/interests/update")
+def update_interests(data: UserInterest):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        # Clean out old interests and insert new ones
+        cursor.execute("DELETE FROM user_interests WHERE user_id = %s", (data.user_id,))
+        for tag in data.interests:
+            cursor.execute("INSERT INTO user_interests (user_id, interest_tag) VALUES (%s, %s)", (data.user_id, tag))
+        db.commit()
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.get("/api/recommend_thesis/{user_id}")
+def recommend_thesis(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+
+        # 1. Get user interests from DB
+        cursor.execute("SELECT interest_tag FROM user_interests WHERE user_id=%s", (user_id,))
+        interests = [i['interest_tag'] for i in cursor.fetchall()]
+
+        # 2. Get completed course keywords
+        cursor.execute("SELECT course_code FROM course_outlines WHERE user_id=%s AND status='Completed'", (user_id,))
+        courses = [c['course_code'].upper() for c in cursor.fetchall()]
+        
+        # Simple mapping
+        course_tags = []
+        for code in courses:
+            numeric_code = "".join(filter(str.isdigit, code))
+            if numeric_code in CURRICULUM_MAP:
+                course_tags.append(CURRICULUM_MAP[numeric_code])
+
+        # 3. Combine tags and Scrape the Web
+        search_tags = list(set(interests + course_tags))
+        recommendations = fetch_real_research_from_arxiv(search_tags) 
+
+        return {
+            "success": True,
+            "recommendations": recommendations,
+            "trending_now": "Generative AI"
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
