@@ -58,7 +58,7 @@ class _MyConsultationsState extends State<MyConsultations> {
     setState(() => isLoading = false);
   }
 
-  Future<void> _updateStatus(int bookingId, String newStatus) async {
+  Future<void> _updateStatus(int bookingId, String newStatus, [String? summaryText]) async {
     try {
       final response = await http.post(
         Uri.parse('http://$_host:8000/update_consultation_status'),
@@ -66,6 +66,8 @@ class _MyConsultationsState extends State<MyConsultations> {
         body: jsonEncode({
           "booking_id": bookingId,
           "status": newStatus,
+          // Include the summary if it was provided
+          if (summaryText != null) "summary": summaryText, 
         }),
       );
 
@@ -77,7 +79,6 @@ class _MyConsultationsState extends State<MyConsultations> {
               consultations.removeWhere((c) => c['booking_id'].toString() == bookingId.toString());
             });
           } else {
-            // Refresh to show Accepted or Completed
             _fetchData();
           }
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Consultation $newStatus')));
@@ -247,7 +248,7 @@ class _MyConsultationsState extends State<MyConsultations> {
 class ConsultationCard extends StatelessWidget {
   final Map<dynamic, dynamic> data;
   final String userRole;
-  final Function(int, String) onUpdateStatus;
+  final Function(int, String, [String?]) onUpdateStatus;
 
   const ConsultationCard({
     super.key,
@@ -356,9 +357,43 @@ class ConsultationCard extends StatelessWidget {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                   onPressed: () {
-                     // Safely parse the ID
                      int bId = int.parse(data['booking_id'].toString());
-                     onUpdateStatus(bId, 'Completed');
+                     TextEditingController summaryController = TextEditingController();
+
+                     // Show the popup to enter the summary
+                     showDialog(
+                       context: context,
+                       builder: (context) => AlertDialog(
+                         title: const Text("Consultation Summary", style: TextStyle(fontFamily: 'Gabarito', fontWeight: FontWeight.bold)),
+                         content: TextField(
+                           controller: summaryController,
+                           maxLines: 4,
+                           decoration: const InputDecoration(
+                             hintText: "Enter key topics discussed...",
+                             border: OutlineInputBorder(),
+                           ),
+                         ),
+                         actions: [
+                           TextButton(
+                             onPressed: () => Navigator.pop(context),
+                             child: const Text("Cancel", style: TextStyle(color: Colors.red)),
+                           ),
+                           ElevatedButton(
+                             style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade700),
+                             onPressed: () {
+                               if (summaryController.text.trim().isEmpty) {
+                                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a summary.")));
+                                 return;
+                               }
+                               Navigator.pop(context); // Close the dialog
+                               // Send the ID, Status, and the Text to the backend
+                               onUpdateStatus(bId, 'Completed', summaryController.text.trim());
+                             },
+                             child: const Text("Submit & Complete", style: TextStyle(color: Colors.white)),
+                           ),
+                         ],
+                       ),
+                     );
                   },
                   child: const Text(
                     'Mark as Completed', 
