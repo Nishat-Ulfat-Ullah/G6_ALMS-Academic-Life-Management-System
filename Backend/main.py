@@ -6,7 +6,7 @@ from typing import Dict, List
 from datetime import date, timedelta
 from typing import Optional
 from pytrends.request import TrendReq
-from curriculam_map import CURRICULUM_MAP
+from mappings import CURRICULUM_MAP, ARXIV_CATEGORY_MAP
 
 import requests
 import xml.etree.ElementTree as ET
@@ -1070,8 +1070,9 @@ def fetch_real_research_from_arxiv(interest_tags):
     if not interest_tags:
         interest_tags = ["Computer Science"]
         
+    # Build the search query
     search_query = "+OR+".join([f"all:{tag.replace(' ', '+')}" for tag in interest_tags])
-    url = f"http://export.arxiv.org/api/query?search_query={search_query}&start=0&max_results=12&sortBy=submittedDate&sortOrder=descending"
+    url = f"http://export.arxiv.org/api/query?search_query={search_query}&start=0&max_results=25&sortBy=submittedDate&sortOrder=descending"
     
     try:
         response = requests.get(url, timeout=10)
@@ -1082,34 +1083,26 @@ def fetch_real_research_from_arxiv(interest_tags):
         for entry in root.findall('atom:entry', ns):
             title = entry.find('atom:title', ns).text.replace('\n', ' ').strip()
             
-            # Find the category
+            # Get and translate the domain
             category_node = entry.find('arxiv:primary_category', ns)
-            category = category_node.attrib['term'] if category_node is not None else "cs.GL"
+            raw_code = category_node.attrib['term'] if category_node is not None else "cs.GL"
+            clean_domain = ARXIV_CATEGORY_MAP.get(raw_code, raw_code)
             
-            # IMPROVED LINK LOGIC:
-            # Look for the PDF link specifically
-            link = None
-            for link_tag in entry.findall('atom:link', ns):
-                if link_tag.get('title') == 'pdf':
-                    link = link_tag.get('href')
-                    break
-            
-            # Fallback to the general ArXiv ID link if PDF link isn't found
+            # Extract PDF link
+            link = next((l.get('href') for l in entry.findall('atom:link', ns) if l.get('title') == 'pdf'), None)
             if not link:
                 id_node = entry.find('atom:id', ns)
                 link = id_node.text if id_node is not None else "https://arxiv.org"
 
             recommendations.append({
                 "topic": title,
-                "domain": category,
-                "match_percentage": 92, 
+                "domain": clean_domain,
                 "url": link
             })
         return recommendations
     except Exception as e:
         print(f"Scraper Error: {e}")
         return []
-
 # --- ENDPOINTS ---
 
 @app.post("/api/interests/update")
@@ -1129,6 +1122,7 @@ def update_interests(data: UserInterest):
     finally:
         if cursor: cursor.close()
         if db: db.close()
+
 @app.get("/api/interests/{user_id}")
 def get_user_interests(user_id: str):
     db = cursor = None
@@ -1144,57 +1138,63 @@ def get_user_interests(user_id: str):
     finally:
         if cursor: cursor.close(); db.close()
 
+
 @app.get("/api/recommend_thesis/{user_id}")
 def recommend_thesis(user_id: str):
+    """
+    Step 2: Ranking results based on "Mixed" topics and completed courses.
+    """
     db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor(dictionary=True)
 
-        # Get the "Search Drivers" (Interests)
+        # 1. Load user choices from MySQL
         cursor.execute("SELECT interest_tag FROM user_interests WHERE user_id=%s", (user_id,))
-        interests = [i['interest_tag'] for i in cursor.fetchall()]
+        requested_interests = [i['interest_tag'].lower() for i in cursor.fetchall()]
 
-        #Get the "Ranking Drivers" (Courses)
+        # 2. Load academic history
         cursor.execute("SELECT course_code FROM course_outlines WHERE user_id=%s AND status='Completed'", (user_id,))
-        completed_raw = [c['course_code'].upper() for c in cursor.fetchall()]
-        
         course_keywords = []
-        for code in completed_raw:
-            num = "".join(filter(str.isdigit, code))
+        for c in cursor.fetchall():
+            num = "".join(filter(str.isdigit, c['course_code']))
             if num in CURRICULUM_MAP:
-                course_keywords.append(CURRICULUM_MAP[num])
+                course_keywords.append(CURRICULUM_MAP[num].lower())
 
-        #Fetch papers based on AI / Interests
-        # We search ArXiv using interests because that's what you WANT to do.
-        raw_papers = fetch_real_research_from_arxiv(interests if interests else ["Computer Science"])
-
-        #The "Best Fit" Filter
-
+        # 3. Process and Rank papers
+        raw_papers = fetch_real_research_from_arxiv(requested_interests)
         final_list = []
+
         for paper in raw_papers:
-            # Base score for matching an interest
-            score = 75 
-            title_lower = paper['topic'].lower()
-
-            # Bonus score if it fits a course you've completed
-            # This makes it a "Best Fit" for your academic level
-            for course_topic in course_keywords:
-                if course_topic.lower() in title_lower:
-                    score += 15  
+    
+            searchable_text = (paper['topic'] + " " + paper['domain']).lower()
             
-            final_list.append({
-                "topic": paper['topic'],
-                "domain": paper['domain'],
-                "match_percentage": min(99, score),
-                "url": paper['url']
-            })
+    
+            match_count = sum(1 for interest in requested_interests if interest in searchable_text)
 
-        # Sort: Highest "Best Fit" score first
+
+            if match_count > 0 or not requested_interests:
+                score = 70 + (match_count * 12)
+                
+                # Small bonus for academic alignment
+                for course in course_keywords:
+                    if course in searchable_text:
+                        score += 5
+                
+                display_name = paper['domain'].split('|')[0]
+
+                final_list.append({
+                    "topic": paper['topic'],
+                    "domain": display_name, 
+                    "match_percentage": min(99, score),
+                    "url": paper['url']
+                })
+
+
         final_list = sorted(final_list, key=lambda x: x['match_percentage'], reverse=True)
 
-        return {"success": True, "recommendations": final_list[:10]}
-    
+        return {"success": True, "recommendations": final_list}
+
     except Exception as e:
         return {"success": False, "error": str(e)}
     finally:

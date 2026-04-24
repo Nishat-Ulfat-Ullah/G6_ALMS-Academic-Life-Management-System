@@ -26,3 +26,21 @@ CURRICULUM_MAP = {
     "220": "Data Structures",
     "221": "Algorithms"
 }
+
+ARXIV_CATEGORY_MAP = {
+    "cs.CV": "Computer Vision",
+    "cs.LG": "Machine Learning",
+    "cs.AI": "Artificial Intelligence",
+    "cs.CL": "Natural Language Processing",
+    "cs.CR": "Cryptography & Security",
+    "cs.SE": "Software Engineering",
+    "cs.RO": "Robotics",
+    "cs.HC": "Human-Computer Interaction",
+    "cs.NI": "Networking & Internet",
+    "cs.DB": "Databases",
+    "cs.GR": "Computer Graphics",
+    "cs.IR": "Information Retrieval",
+    "cs.AR": "Hardware Architecture",
+    "cs.OS": "Operating Systems",
+    "cs.DS": "Data Structures"
+}
