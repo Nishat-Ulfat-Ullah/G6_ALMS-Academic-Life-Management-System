@@ -1129,6 +1129,20 @@ def update_interests(data: UserInterest):
     finally:
         if cursor: cursor.close()
         if db: db.close()
+@app.get("/api/interests/{user_id}")
+def get_user_interests(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("SELECT interest_tag FROM user_interests WHERE user_id=%s", (user_id,))
+        # Extract just the strings into a list
+        interests = [row['interest_tag'] for row in cursor.fetchall()]
+        return {"success": True, "interests": interests}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close(); db.close()
 
 @app.get("/api/recommend_thesis/{user_id}")
 def recommend_thesis(user_id: str):
@@ -1137,32 +1151,51 @@ def recommend_thesis(user_id: str):
         db = get_db()
         cursor = db.cursor(dictionary=True)
 
-        # 1. Get user interests from DB
+        # Get the "Search Drivers" (Interests)
         cursor.execute("SELECT interest_tag FROM user_interests WHERE user_id=%s", (user_id,))
         interests = [i['interest_tag'] for i in cursor.fetchall()]
 
-        # 2. Get completed course keywords
+        #Get the "Ranking Drivers" (Courses)
         cursor.execute("SELECT course_code FROM course_outlines WHERE user_id=%s AND status='Completed'", (user_id,))
-        courses = [c['course_code'].upper() for c in cursor.fetchall()]
+        completed_raw = [c['course_code'].upper() for c in cursor.fetchall()]
         
-        # Simple mapping
-        course_tags = []
-        for code in courses:
-            numeric_code = "".join(filter(str.isdigit, code))
-            if numeric_code in CURRICULUM_MAP:
-                course_tags.append(CURRICULUM_MAP[numeric_code])
+        course_keywords = []
+        for code in completed_raw:
+            num = "".join(filter(str.isdigit, code))
+            if num in CURRICULUM_MAP:
+                course_keywords.append(CURRICULUM_MAP[num])
 
-        # 3. Combine tags and Scrape the Web
-        search_tags = list(set(interests + course_tags))
-        recommendations = fetch_real_research_from_arxiv(search_tags) 
+        #Fetch papers based on AI / Interests
+        # We search ArXiv using interests because that's what you WANT to do.
+        raw_papers = fetch_real_research_from_arxiv(interests if interests else ["Computer Science"])
 
-        return {
-            "success": True,
-            "recommendations": recommendations,
-            "trending_now": "Generative AI"
-        }
+        #The "Best Fit" Filter
+
+        final_list = []
+        for paper in raw_papers:
+            # Base score for matching an interest
+            score = 75 
+            title_lower = paper['topic'].lower()
+
+            # Bonus score if it fits a course you've completed
+            # This makes it a "Best Fit" for your academic level
+            for course_topic in course_keywords:
+                if course_topic.lower() in title_lower:
+                    score += 15  
+            
+            final_list.append({
+                "topic": paper['topic'],
+                "domain": paper['domain'],
+                "match_percentage": min(99, score),
+                "url": paper['url']
+            })
+
+        # Sort: Highest "Best Fit" score first
+        final_list = sorted(final_list, key=lambda x: x['match_percentage'], reverse=True)
+
+        return {"success": True, "recommendations": final_list[:10]}
+    
     except Exception as e:
         return {"success": False, "error": str(e)}
     finally:
-        if cursor: cursor.close()
-        if db: db.close()
+        if cursor: cursor.close(); db.close()
