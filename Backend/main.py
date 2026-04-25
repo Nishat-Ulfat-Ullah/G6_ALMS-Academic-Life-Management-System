@@ -9,6 +9,13 @@ import mysql.connector
 import os
 import shutil
 import uvicorn
+
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from dotenv import load_dotenv
+
+
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app = FastAPI()
@@ -72,7 +79,7 @@ class SaveRoutine(BaseModel):
     provider_id: str
     routine: Dict[str, List[str]]
 
-class UpdateStatusRequest(BaseModel):
+class UpdateStatus(BaseModel):
     booking_id: int
     status: str
     summary: Optional[str] = None
@@ -152,7 +159,35 @@ def get_db():
         password="123",
         database="project"
     )
+#loads the variables from .env file
+load_dotenv()
 
+# Sender credentials here
+SENDER_EMAIL = os.getenv("EMAIL_USER")
+APP_PASSWORD = os.getenv("EMAIL_PASS")
+
+def send_notification_email(to_email: str, subject: str, body: str):
+    try:
+        # Set up the email message structure
+        msg = MIMEMultipart()
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        
+        # Attach the body text
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # Connect to Gmail's SMTP server
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls() # Secure the connection
+        server.login(SENDER_EMAIL, APP_PASSWORD)
+        
+        # Send and close
+        server.send_message(msg)
+        server.quit()
+        print(f"Email successfully sent to {to_email}")
+    except Exception as e:
+        print(f"Failed to send email to {to_email}: {e}")
 
 # ===================== USER SYSTEM =====================
 @app.post("/register")
@@ -327,12 +362,13 @@ def get_my_consultations(user_id: str, role: str):
 
 
 @app.post("/update_consultation_status")
-def update_consultation_status(req: UpdateStatusRequest):
+def update_consultation_status(req: UpdateStatus):
     db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor()
         
+        # --- 1. UPDATE THE STATUS ---
         # If it's Completed and has a summary, update both status and summary
         if req.status == 'Completed' and req.summary is not None:
             cursor.execute("""
@@ -349,7 +385,53 @@ def update_consultation_status(req: UpdateStatusRequest):
             """, (req.status, req.booking_id))
             
         db.commit()
+
+        # --- 2. FETCH BOOKING DETAILS FOR EMAILS ---
+        # Only send emails for Accepted or Rejected statuses
+        if req.status in ['Accepted', 'Rejected']:
+            cursor.execute("""
+                SELECT student_id, provider_id, course_name, time_slot, day_of_week 
+                FROM consultation_bookings WHERE booking_id = %s
+            """, (req.booking_id,))
+            booking = cursor.fetchone()
+
+            if booking:
+                # Standard tuple indexing based on the SELECT order above
+                student_id = booking[0]
+                provider_id = booking[1]
+                course_name = booking[2]
+                time_slot = booking[3]
+                day_of_week = booking[4]
+
+                # --- 3. FETCH EMAILS ---
+                # Changed to 'user_id' to perfectly match your database table!
+                cursor.execute("SELECT email FROM users WHERE user_id = %s", (student_id,))
+                student = cursor.fetchone()
+                
+                cursor.execute("""
+                    SELECT users.email 
+                    FROM users 
+                    JOIN faculties ON users.user_id = faculties.f_id 
+                    WHERE faculties.f_initial = %s
+                """, (provider_id,))
+                faculty = cursor.fetchone()
+
+                # --- 4. SEND EMAILS ---
+                subject = f"Consultation {req.status}: {course_name}"
+                
+                if student and student[0]:
+                    student_email = student[0]
+                    student_body = f"Hello,\n\nYour consultation request for {course_name} on {day_of_week} at {time_slot} has been {req.status} by the faculty.\n\nThank you."
+                    # Make sure the send_notification_email function is defined above this in your file!
+                    send_notification_email(student_email, subject, student_body)
+                    
+                if faculty and faculty[0]:
+                    faculty_email = faculty[0]
+                    faculty_body = f"Hello,\n\nYou have successfully {req.status} the consultation request for {course_name} on {day_of_week} at {time_slot}.\n\nThank you."
+                    send_notification_email(faculty_email, subject, faculty_body)
+
         return {"success": True, "message": f"Status updated to {req.status}"}
+    
     except Exception as e:
         if db: db.rollback()
         return {"success": False, "error": str(e)}
@@ -506,13 +588,44 @@ def book_consultation(req: BookingRequest):
         """, (req.routine_id,))
         
         db.commit()
+
+        # 1. Fetch Student Email
+        cursor.execute("SELECT email FROM users WHERE user_id = %s", (req.student_id,))
+        student_row = cursor.fetchone()
+        
+        # 2. Fetch Faculty Email
+        cursor.execute("""
+            SELECT users.email 
+            FROM users 
+            JOIN faculties ON users.user_id = faculties.f_id 
+            WHERE faculties.f_initial = %s
+        """, (req.provider_id,))
+        faculty_row = cursor.fetchone() 
+
+        #Send Email Student
+        if student_row and student_row[0]:
+            send_notification_email(
+                to_email=student_row[0],
+                subject="Consultation Request Sent",
+                body=f"You have successfully requested a consultation for {req.course_name}."
+            )
+        #Send Email Faculty
+        if faculty_row and faculty_row[0]:
+            send_notification_email(
+                to_email=faculty_row[0],
+                subject="New Consultation Request",
+                body=f"You have a new consultation request for {req.course_name}. Please log in to the app to Accept or Reject it."
+            )
+
         return {"success": True, "message": "Consultation booked successfully"}
+        
     except Exception as e:
         if db: db.rollback() 
         return {"success": False, "error": str(e)}
     finally:
         if cursor: cursor.close()
         if db: db.close()
+
 
 # ===================== NOTE SYSTEM =====================
 
