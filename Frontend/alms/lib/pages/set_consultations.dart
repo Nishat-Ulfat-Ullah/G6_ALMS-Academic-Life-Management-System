@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'dart:io'; 
+import 'dart:io';
+import 'package:intl/intl.dart';
 
 class SetConsultations extends StatefulWidget {
   final String currentUserID;
@@ -12,255 +13,243 @@ class SetConsultations extends StatefulWidget {
 }
 
 class _SetConsultationsState extends State<SetConsultations> {
-  final List<String> days = [
-    'SUNDAY',
-    'MONDAY',
-    'TUESDAY',
-    'WEDNESDAY',
-    'THURSDAY',
-    'SATURDAY'
+  bool isLoading = true;
+  // Map to group slots by date: {'2026-04-30': [{routine_id: 1, time_slot: '10:00 AM', is_booked: 0}, ...]}
+  Map<String, List<Map<String, dynamic>>> groupedRoutines = {};
+
+  final List<String> availableTimeSlots = [
+    '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
+    '12:00 PM', '12:30 PM', '01:00 PM', '01:30 PM', '02:00 PM', '02:30 PM',
+    '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM', '05:00 PM'
   ];
 
-  final List<String> timeSlots = [
-    '10:00 am', '11:00 am', '12:00 pm', 
-    '01:00 pm', '02:00 pm', '03:00 pm'
-  ];
-
-  //Track the selected slots for each day
-  final Map<String, Set<String>> selectedSchedule = {};
+  String get host => Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
 
   @override
   void initState() {
     super.initState();
-    for (var day in days) {
-      selectedSchedule[day] = {};
+    fetchRoutines();
+  }
+
+  Future<void> fetchRoutines() async {
+    setState(() => isLoading = true);
+    try {
+      final url = Uri.parse('http://$host:8000/api/routines/provider/${widget.currentUserID}');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
+        if (responseData['success']) {
+          List<dynamic> data = responseData['data'];
+          
+          // Group data by date
+          Map<String, List<Map<String, dynamic>>> tempGroup = {};
+          for (var item in data) {
+            String date = item['con_date'];
+            if (!tempGroup.containsKey(date)) {
+              tempGroup[date] = [];
+            }
+            tempGroup[date]!.add(item);
+          }
+          
+          setState(() {
+            groupedRoutines = tempGroup;
+          });
+        }
+      }
+    } catch (e) {
+      print("Error fetching routines: $e");
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> deleteSlot(int routineId) async {
+    try {
+      final url = Uri.parse('http://$host:8000/api/routines/delete/$routineId');
+      final response = await http.delete(url);
+      if (response.statusCode == 200) {
+        fetchRoutines(); // Refresh list
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Slot removed')));
+      }
+    } catch (e) {
+      print("Delete error: $e");
+    }
+  }
+
+  void _showAddDialog() {
+    DateTime? selectedDate;
+    Set<String> selectedSlots = {};
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              title: const Text("Add Consultation Slots"),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Date Picker Button
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.now(),
+                          firstDate: DateTime.now(), // Prevents picking past dates
+                          lastDate: DateTime.now().add(const Duration(days: 60)),
+                        );
+                        if (picked != null) {
+                          setModalState(() {
+                            selectedDate = picked;
+                          });
+                        }
+                      },
+                      icon: const Icon(Icons.calendar_today),
+                      label: Text(selectedDate == null 
+                          ? "Select Date" 
+                          : DateFormat('yyyy-MM-dd').format(selectedDate!)),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Time Slot Grid
+                    if (selectedDate != null) ...[
+                      const Text("Select 30-min Intervals:"),
+                      const SizedBox(height: 8),
+                      Flexible(
+                        child: SingleChildScrollView(
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: availableTimeSlots.map((time) {
+                              bool isSelected = selectedSlots.contains(time);
+                              return ChoiceChip(
+                                label: Text(time),
+                                selected: isSelected,
+                                onSelected: (selected) {
+                                  setModalState(() {
+                                    selected ? selectedSlots.add(time) : selectedSlots.remove(time);
+                                  });
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
+                    ]
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  onPressed: (selectedDate == null || selectedSlots.isEmpty) ? null : () async {
+                    Navigator.pop(context); // Close dialog
+                    await _saveNewRoutine(DateFormat('yyyy-MM-dd').format(selectedDate!), selectedSlots.toList());
+                  },
+                  child: const Text("Save"),
+                )
+              ],
+            );
+          }
+        );
+      }
+    );
+  }
+
+  Future<void> _saveNewRoutine(String date, List<String> slots) async {
+    Map<String, dynamic> payload = {
+      "provider_id": widget.currentUserID,
+      "con_date": date,
+      "time_slots": slots,
+    };
+
+    try {
+      final url = Uri.parse('http://$host:8000/api/routines/add');
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Slots added!')));
+        fetchRoutines(); // Refresh UI
+      }
+    } catch (e) {
+      print("Save error: $e");
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Sort dates so upcoming is first
+    List<String> sortedDates = groupedRoutines.keys.toList()..sort();
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: const Color.fromARGB(255, 138, 201, 243), 
         title: const Text("Set Consultations"),
       ),
-      drawer: Drawer(
-        child: Column(
-          children: [
-            const DrawerHeader(
-              child: Icon(Icons.favorite, size: 48),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('H O M E'),
-              onTap: () {
-                Navigator.pushNamed(context, '/homepage');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.book),
-              title: const Text('MY NOTES'),
-              onTap: (){
-                Navigator.pushNamed(context, '/mynotespage');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.timer),
-              title: const Text('MY CONSULTATIONS'),
-              onTap: () {
-                Navigator.pushNamed(context, '/myconsultations');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.timer),
-              title: const Text('BOOK CONSULTATIONS'),
-              onTap: () {
-                Navigator.pushNamed(context, '/bookconsultations');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('S E T T I N G S'),
-              onTap: (){
-                Navigator.pushNamed(context, '/settingspage');
-              },
-            )
-          ],
-        ),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: ListView.separated(
-            padding: const EdgeInsets.only(bottom: 80, top: 20),
-            itemCount: days.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 20),
-            itemBuilder: (context, index) {
-              return _buildDayCard(days[index]);
-            },
-          ),
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          print("--- 1. SAVE BUTTON CLICKED ---");
-          
-          Map<String, List<String>> apiReadySchedule = {};
-          selectedSchedule.forEach((day, times) {
-            if (times.isNotEmpty) {
-              apiReadySchedule[day] = times.toList();
-            }
-          });
-
-          Map<String, dynamic> payload = {
-            "provider_id": widget.currentUserID,
-            "routine": apiReadySchedule,
-          };
-          
-          print("--- 2. PAYLOAD READY: $payload ---");
-
-          try {
-            print("--- 3. SENDING HTTP POST REQUEST... ---");
-            
-            // Dynamic host selection!
-            final host = Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
-            final url = Uri.parse('http://$host:8000/save_routine');
-            
-            final response = await http.post(
-              url, 
-              headers: {"Content-Type": "application/json"},
-              body: jsonEncode(payload),
-            );
-
-            print("--- 4. RESPONSE RECEIVED! Status Code: ${response.statusCode} ---");
-            print("--- 5. RESPONSE BODY: ${response.body} ---");
-
-            if (response.statusCode == 200) {
-              final responseData = jsonDecode(response.body);
-              
-              if (responseData['success'] == true) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Routine Saved Successfully!')),
-                );
+      body: isLoading 
+        ? const Center(child: CircularProgressIndicator())
+        : sortedDates.isEmpty 
+          ? const Center(child: Text("No upcoming consultations. Click '+' to add."))
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: sortedDates.length,
+              itemBuilder: (context, index) {
+                String dateStr = sortedDates[index];
+                List<Map<String, dynamic>> slots = groupedRoutines[dateStr]!;
                 
-                if (mounted) {
-                  Navigator.pushReplacementNamed(
-                    context, 
-                    '/myconsultations',
-                    arguments: widget.currentUserID,
-                  );
-                }
-              } else {
-                print("--- BACKEND LOGIC ERROR: ${responseData['error']} ---");
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Database Error: ${responseData['error']}')),
+                // Format date for display (e.g., "April 30, 2026")
+                DateTime parsedDate = DateTime.parse(dateStr);
+                String displayDate = DateFormat('MMMM d, yyyy').format(parsedDate);
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  color: const Color(0xFFD9F5FF),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          displayDate,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: slots.map((slotData) {
+                            bool isBooked = slotData['is_booked'] == 1;
+                            return Chip(
+                              label: Text(slotData['time_slot']),
+                              backgroundColor: isBooked ? Colors.grey.shade300 : Colors.white,
+                              deleteIcon: isBooked ? null : const Icon(Icons.close, size: 18),
+                              onDeleted: isBooked ? null : () => deleteSlot(slotData['routine_id']),
+                            );
+                          }).toList(),
+                        )
+                      ],
+                    ),
+                  ),
                 );
-              }
-            } else {
-              print("--- SERVER RETURNED BAD STATUS CODE ---");
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Server Error: ${response.statusCode}')),
-              );
-            }
-          } catch (e) {
-            print("--- CRITICAL NETWORK ERROR: $e ---");
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Network error: Could not reach server.')),
-            );
-          }
-        },
-        label: const Text('Save Routine'),
-        icon: const Icon(Icons.save),
-        backgroundColor: const Color.fromARGB(255, 138, 201, 243),
-        foregroundColor: Colors.black,
-      ),
-    );
-  }
-
-  Widget _buildDayCard(String day) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: ShapeDecoration(
-        color: const Color(0xFFD9F5FF), 
-        shape: RoundedRectangleBorder(
-          side: const BorderSide(width: 1, color: Colors.black12),
-          borderRadius: BorderRadius.circular(22),
-        ),
-        shadows: const [
-          BoxShadow(
-            color: Color(0x1F000000), 
-            blurRadius: 8,
-            offset: Offset(0, 4),
-          )
-        ],
-      ),
-      child: Column(
-        children: [
-          Text(
-            day,
-            style: const TextStyle(
-              color: Colors.black,
-              fontSize: 20,
-              fontFamily: 'Gabarito',
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.2,
+              },
             ),
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            alignment: WrapAlignment.center,
-            children: timeSlots.map((time) => _buildSelectableTimeSlot(day, time)).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-  Widget _buildSelectableTimeSlot(String day, String time) {
-    bool isSelected = selectedSchedule[day]!.contains(time);
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          if (isSelected) {
-            selectedSchedule[day]!.remove(time); 
-          } else {
-            selectedSchedule[day]!.add(time); 
-          }
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: ShapeDecoration(
-          color: isSelected ? Colors.blue.shade700 : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(9),
-            side: BorderSide(
-              color: isSelected ? Colors.blue.shade900 : Colors.transparent,
-              width: 1,
-            )
-          ),
-          shadows: const [
-            BoxShadow(
-              color: Color(0x0F000000),
-              blurRadius: 2,
-              offset: Offset(0, 2),
-            )
-          ],
-        ),
-        child: Text(
-          time,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.black87,
-            fontSize: 16,
-            fontFamily: 'Gabarito',
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddDialog,
+        backgroundColor: const Color.fromARGB(255, 138, 201, 243),
+        child: const Icon(Icons.add, color: Colors.black),
       ),
     );
   }

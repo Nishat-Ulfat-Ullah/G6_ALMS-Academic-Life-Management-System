@@ -93,19 +93,16 @@ class UpdateStatus(BaseModel):
     status: str
     summary: Optional[str] = None
 
-class RoutineItem(BaseModel):
-    day_of_week: str
-    time_slot: str
-
-class UpdateRoutineRequest(BaseModel):
-    provider_id: str  
-    routines: List[RoutineItem]
+class AddRoutineDate(BaseModel):
+    provider_id: str
+    con_date: str
+    time_slots: List[str]
 
 class BookingRequest(BaseModel):
     student_id: str
     provider_id: str 
     course_name: str
-    day_of_week: str
+    con_date: str 
     time_slot: str
     routine_id: int
 
@@ -299,37 +296,69 @@ def check_role(user_id: str):
 
 # ===================== Consultations SYSTEM =====================
 
-@app.post("/save_routine")
-def save_routine(payload: SaveRoutine):
+# 1. Fetch upcoming routines for a specific faculty (to display in their settings)
+@app.get("/api/routines/provider/{provider_id}")
+def get_provider_my_routines(provider_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        # CURDATE() ensures past dates are automatically hidden!
+        cursor.execute("""
+            SELECT routine_id, con_date, time_slot, is_booked 
+            FROM consultation_routines 
+            WHERE provider_id = %s AND con_date >= CURDATE()
+            ORDER BY con_date ASC, time_slot ASC
+        """, (provider_id,))
+        
+        # Convert date to string for JSON serialization
+        routines = cursor.fetchall()
+        for r in routines:
+            r['con_date'] = str(r['con_date']) 
+            
+        return {"success": True, "data": routines}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+# 2. Add new time slots for a specific date
+@app.post("/api/routines/add")
+def add_routine_date(payload: AddRoutineDate):
     db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor()
         
-        cursor.execute(
-            "DELETE FROM consultation_routines WHERE provider_id = %s AND is_booked = FALSE",
-            (payload.provider_id,)
-        )
-
         insert_query = """
-            INSERT IGNORE INTO consultation_routines (provider_id, day_of_week, time_slot, is_booked)
+            INSERT IGNORE INTO consultation_routines (provider_id, con_date, time_slot, is_booked)
             VALUES (%s, %s, %s, FALSE)
         """
+        insert_data = [(payload.provider_id, payload.con_date, t) for t in payload.time_slots]
         
-        insert_data = []
-        for day, times in payload.routine.items():
-            for time_slot in times:
-                insert_data.append((payload.provider_id, day, time_slot))
-
         if insert_data:
             cursor.executemany(insert_query, insert_data)
-
         db.commit()
-        return {"success": True, "message": "Routine saved successfully"}
-
+        return {"success": True, "message": "Slots added successfully"}
     except Exception as e:
-        if db: 
-            db.rollback() 
+        if db: db.rollback()
+        return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+# 3. Delete a specific time slot
+@app.delete("/api/routines/delete/{routine_id}")
+def delete_routine_slot(routine_id: int):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM consultation_routines WHERE routine_id = %s AND is_booked = FALSE", (routine_id,))
+        db.commit()
+        return {"success": True}
+    except Exception as e:
         return json_error(str(e))
     finally:
         if cursor: cursor.close()
@@ -410,7 +439,7 @@ def update_consultation_status(req: UpdateStatus):
         # Only send emails for Accepted or Rejected statuses
         if req.status in ['Accepted', 'Rejected']:
             cursor.execute("""
-                SELECT student_id, provider_id, course_name, time_slot, day_of_week 
+                SELECT student_id, provider_id, course_name, time_slot, con_date 
                 FROM consultation_bookings WHERE booking_id = %s
             """, (req.booking_id,))
             booking = cursor.fetchone()
@@ -421,7 +450,7 @@ def update_consultation_status(req: UpdateStatus):
                 provider_id = booking[1]
                 course_name = booking[2]
                 time_slot = booking[3]
-                day_of_week = booking[4]
+                con_date = booking[4]
 
                 # --- 3. FETCH EMAILS ---
                 # Changed to 'user_id' to perfectly match your database table!
@@ -441,13 +470,13 @@ def update_consultation_status(req: UpdateStatus):
                 
                 if student and student[0]:
                     student_email = student[0]
-                    student_body = f"Hello,\n\nYour consultation request for {course_name} on {day_of_week} at {time_slot} has been {req.status} by the faculty.\n\nThank you."
+                    student_body = f"Hello,\n\nYour consultation request for {course_name} on {con_date} at {time_slot} has been {req.status} by the faculty.\n\nThank you."
                     # Make sure the send_notification_email function is defined above this in your file!
                     send_notification_email(student_email, subject, student_body)
                     
                 if faculty and faculty[0]:
                     faculty_email = faculty[0]
-                    faculty_body = f"Hello,\n\nYou have successfully {req.status} the consultation request for {course_name} on {day_of_week} at {time_slot}.\n\nThank you."
+                    faculty_body = f"Hello,\n\nYou have successfully {req.status} the consultation request for {course_name} on {con_date} at {time_slot}.\n\nThank you."
                     send_notification_email(faculty_email, subject, faculty_body)
 
         return {"success": True, "message": f"Status updated to {req.status}"}
@@ -547,39 +576,13 @@ def get_provider_routine(provider_initial: str):
         # JOIN tables to link f_initial (RHD) to f_id (T24001)
         # Only return slots where is_booked = 0
         cursor.execute("""
-            SELECT cr.routine_id, cr.day_of_week, cr.time_slot 
+            SELECT cr.routine_id, cr.con_date, cr.time_slot 
             FROM consultation_routines cr
             JOIN faculties f ON cr.provider_id = f.f_id
             WHERE f.f_initial = %s AND cr.is_booked = 0
         """, (provider_initial,))
         return {"success": True, "data": cursor.fetchall()}
     except Exception as e:
-        return {"success": False, "error": str(e)}
-    finally:
-        if cursor: cursor.close()
-        if db: db.close()
-
-
-@app.post("/update_routine")
-def update_routine(req: UpdateRoutineRequest):
-    db = cursor = None
-    try:
-        db = get_db()
-        cursor = db.cursor()
-
-        cursor.execute("DELETE FROM consultation_routines WHERE provider_id = %s", (req.provider_id,))
-        
-        for slot in req.routines:
-            cursor.execute("""
-                INSERT INTO consultation_routines (provider_id, day_of_week, time_slot, is_booked)
-                VALUES (%s, %s, %s, 0)
-            """, (req.provider_id, slot.day_of_week, slot.time_slot))      
-
-        db.commit()
-        return {"success": True, "message": "Routine updated and all slots reset!"}
-        
-    except Exception as e:
-        if db: db.rollback() 
         return {"success": False, "error": str(e)}
     finally:
         if cursor: cursor.close()
@@ -596,9 +599,9 @@ def book_consultation(req: BookingRequest):
         #Insert the booking into consultation_bookings
         cursor.execute("""
             INSERT INTO consultation_bookings 
-            (student_id, provider_id, course_name, day_of_week, time_slot, status) 
+            (student_id, provider_id, course_name, con_date, time_slot, status) 
             VALUES (%s, %s, %s, %s, %s, 'Pending')
-        """, (req.student_id, req.provider_id, req.course_name, req.day_of_week, req.time_slot))
+        """, (req.student_id, req.provider_id, req.course_name, req.con_date, req.time_slot))
         
         #Update the consultation_routines to mark this specific slot as booked
         cursor.execute("""

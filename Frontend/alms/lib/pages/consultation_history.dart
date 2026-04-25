@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart'; // Added for date formatting
 
 class ConsultationHistory extends StatefulWidget {
   final String userId;
@@ -133,6 +134,17 @@ class HistoryCard extends StatelessWidget {
     String personLabel = userRole == 'student' ? 'Faculty' : 'Student';
     String personName = userRole == 'student' ? data['provider_id'] : data['student_id'];
 
+    // FIX: Parse and format the new con_date instead of day_of_week
+    String displayDate = 'Unknown Date';
+    if (data['con_date'] != null) {
+      try {
+        DateTime parsedDate = DateTime.parse(data['con_date'].toString());
+        displayDate = DateFormat('MMMM d, yyyy').format(parsedDate);
+      } catch (e) {
+        displayDate = data['con_date'].toString(); // Fallback if parsing fails
+      }
+    }
+
     return InkWell(
       onTap: () {
         // Only show the summary popup if it was completed
@@ -164,7 +176,8 @@ class HistoryCard extends StatelessWidget {
             const SizedBox(height: 12),
             _buildInfoRow('Time', data['time_slot']),
             const SizedBox(height: 12),
-            _buildInfoRow('Day', data['day_of_week']),
+            // FIX: Label changed to Date, passing displayDate
+            _buildInfoRow('Date', displayDate),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
