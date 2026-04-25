@@ -6,14 +6,21 @@ from typing import Dict, List
 from datetime import date, timedelta
 from typing import Optional
 from pytrends.request import TrendReq
-from mappings import CURRICULUM_MAP, ARXIV_CATEGORY_MAP
-
+from mappings import CURRICULUM_MAP, ARXIV_CATEGORY_MAP, COURSE_SKILL_MAP
+import json
 import requests
 import xml.etree.ElementTree as ET
 import mysql.connector
 import os
 import shutil
 import uvicorn
+import re
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -160,7 +167,7 @@ def get_db():
     return mysql.connector.connect(
         host="localhost",
         user="root",
-        password="123",
+        password="1234",
         database="project"
     )
 
@@ -1067,42 +1074,57 @@ def get_comments(note_id: int):
 
 # --- THE SCRAPER  ---
 def fetch_real_research_from_arxiv(interest_tags):
-    if not interest_tags:
-        interest_tags = ["Computer Science"]
-        
-    # Build the search query
-    search_query = "+OR+".join([f"all:{tag.replace(' ', '+')}" for tag in interest_tags])
-    url = f"http://export.arxiv.org/api/query?search_query={search_query}&start=0&max_results=25&sortBy=submittedDate&sortOrder=descending"
-    
     try:
+        if not interest_tags:
+            interest_tags = ["Artificial Intelligence"]
+
+        search_query = "+OR+".join(
+            [f"all:{tag.replace(' ', '+')}" for tag in interest_tags]
+        )
+
+        url =f"http://export.arxiv.org/api/query?search_query={search_query}&start=0&max_results=40"
+
         response = requests.get(url, timeout=10)
+
+        if response.status_code != 200:
+            return []
+
         root = ET.fromstring(response.content)
-        recommendations = []
-        ns = {'atom': 'http://www.w3.org/2005/Atom', 'arxiv': 'http://arxiv.org/schemas/atom'}
+
+        results = []
+
+        ns = {
+            'atom': 'http://www.w3.org/2005/Atom',
+            'arxiv': 'http://arxiv.org/schemas/atom'
+        }
 
         for entry in root.findall('atom:entry', ns):
-            title = entry.find('atom:title', ns).text.replace('\n', ' ').strip()
-            
-            # Get and translate the domain
-            category_node = entry.find('arxiv:primary_category', ns)
-            raw_code = category_node.attrib['term'] if category_node is not None else "cs.GL"
-            clean_domain = ARXIV_CATEGORY_MAP.get(raw_code, raw_code)
-            
-            # Extract PDF link
-            link = next((l.get('href') for l in entry.findall('atom:link', ns) if l.get('title') == 'pdf'), None)
-            if not link:
-                id_node = entry.find('atom:id', ns)
-                link = id_node.text if id_node is not None else "https://arxiv.org"
+            title_node = entry.find('atom:title', ns)
+            id_node = entry.find('atom:id', ns)
 
-            recommendations.append({
+            if title_node is None or id_node is None:
+                continue
+
+            title = title_node.text.strip()
+            link = id_node.text.strip()
+
+            category_node = entry.find('arxiv:primary_category', ns)
+            raw = category_node.attrib["term"] if category_node is not None else "cs.AI"
+
+            domain = ARXIV_CATEGORY_MAP.get(raw, raw)
+
+            results.append({
                 "topic": title,
-                "domain": clean_domain,
+                "domain": domain,
                 "url": link
             })
-        return recommendations
+
+        return results
+
     except Exception as e:
-        print(f"Scraper Error: {e}")
+        print("ARXIV ERROR:", e)
         return []
+
 # --- ENDPOINTS ---
 
 @app.post("/api/interests/update")
@@ -1138,64 +1160,141 @@ def get_user_interests(user_id: str):
     finally:
         if cursor: cursor.close(); db.close()
 
+def extract_skills(courses_raw):
+    skills = []
 
-@app.get("/api/recommend_thesis/{user_id}")
-def recommend_thesis(user_id: str):
-    """
-    Step 2: Ranking results based on "Mixed" topics and completed courses.
-    """
+    for c in courses_raw:
+        code = str(c["course_code"])
+
+        if code in COURSE_SKILL_MAP:
+            skills.extend(COURSE_SKILL_MAP[code])
+
+        # fallback mapping from curriculum
+        if code in CURRICULUM_MAP:
+            skills.append(CURRICULUM_MAP[code])
+
+    return list(set(skills))
+
+
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=OPENAI_API_KEY,
+    base_url="https://models.inference.ai.azure.com"  
+)
+
+
+
+def format_papers_for_prompt(papers: list) -> str:
+    if not papers:
+        return "No recent papers found."
+    lines = []
+    for i, p in enumerate(papers[:8], 1):
+        lines.append(f"{i}. [{p['domain']}] {p['topic']} — {p['url']}")
+    return "\n".join(lines)
+
+
+def generate_thesis_ideas(interests: list, skills: list, papers: list) -> list:
+    papers_text = format_papers_for_prompt(papers)
+
+    prompt = f"""You are an expert academic research advisor helping an undergraduate student find a thesis topic.
+
+Student profile:
+- Research interests: {", ".join(interests) if interests else "General AI/CS"}
+- Skills from completed courses: {", ".join(skills) if skills else "Programming fundamentals"}
+
+Recent trending research for inspiration (do NOT copy these — use them only as context):
+{papers_text}
+
+Generate exactly 5 unique, original thesis ideas tailored to this student's profile.
+
+Rules:
+- Ideas must be feasible for a 1-year undergraduate thesis
+- Each idea must combine the student's interests AND skills
+- Titles must be specific, not generic (avoid "AI-Based System for X")
+- Methodology must be concrete and actionable
+- Related papers should reference actual papers from the list above when relevant
+
+Return ONLY a valid JSON array, no markdown, no extra text:
+[
+  {{
+    "title": "...",
+    "description": "...",
+    "methodology": "...",
+    "tools": ["...", "..."],
+    "difficulty": "Low|Medium|High",
+    "related_research": ["paper title 1", "paper title 2"],
+    "paper_urls": ["url1", "url2"]
+  }}
+]"""
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are an academic thesis advisor. Always respond with valid JSON only."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.8,
+        max_tokens=2000
+    )
+
+    raw = response.choices[0].message.content.strip()
+
+    # Strip markdown code fences if present
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+
+    ideas = json.loads(raw)
+
+    # Attach real paper URLs from ArXiv to matching ideas
+    paper_url_map = {p["topic"]: p["url"] for p in papers}
+    for idea in ideas:
+        idea["paper_urls"] = [
+            paper_url_map[title]
+            for title in idea.get("related_research", [])
+            if title in paper_url_map
+        ]
+
+    return ideas
+
+
+@app.get("/api/generate_thesis/{user_id}")
+def generate_thesis(user_id: str):
     db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor(dictionary=True)
 
-        # 1. Load user choices from MySQL
-        cursor.execute("SELECT interest_tag FROM user_interests WHERE user_id=%s", (user_id,))
-        requested_interests = [i['interest_tag'].lower() for i in cursor.fetchall()]
+        # 1. Fetch interests
+        cursor.execute(
+            "SELECT interest_tag FROM user_interests WHERE user_id = %s",
+            (user_id,)
+        )
+        interests = [row["interest_tag"] for row in cursor.fetchall()]
 
-        # 2. Load academic history
-        cursor.execute("SELECT course_code FROM course_outlines WHERE user_id=%s AND status='Completed'", (user_id,))
-        course_keywords = []
-        for c in cursor.fetchall():
-            num = "".join(filter(str.isdigit, c['course_code']))
-            if num in CURRICULUM_MAP:
-                course_keywords.append(CURRICULUM_MAP[num].lower())
+        # 2. Fetch completed courses and extract skills
+        cursor.execute(
+            "SELECT course_code FROM course_outlines WHERE user_id = %s AND status = 'Completed'",
+            (user_id,)
+        )
+        courses_raw = cursor.fetchall()
+        skills = extract_skills(courses_raw)
 
-        # 3. Process and Rank papers
-        raw_papers = fetch_real_research_from_arxiv(requested_interests)
-        final_list = []
+        # 3. Fetch trending ArXiv papers based on interests
+        papers = fetch_real_research_from_arxiv(interests or ["Artificial Intelligence"])
+        
+        if not isinstance(papers, list):
+            papers = []
 
-        for paper in raw_papers:
-    
-            searchable_text = (paper['topic'] + " " + paper['domain']).lower()
-            
-    
-            match_count = sum(1 for interest in requested_interests if interest in searchable_text)
+        # 4. Generate ideas via AI (the actual call, finally!)
+        ideas = generate_thesis_ideas(interests, skills, papers)
 
+        return {"success": True, "ideas": ideas}
 
-            if match_count > 0 or not requested_interests:
-                score = 70 + (match_count * 12)
-                
-                # Small bonus for academic alignment
-                for course in course_keywords:
-                    if course in searchable_text:
-                        score += 5
-                
-                display_name = paper['domain'].split('|')[0]
-
-                final_list.append({
-                    "topic": paper['topic'],
-                    "domain": display_name, 
-                    "match_percentage": min(99, score),
-                    "url": paper['url']
-                })
-
-
-        final_list = sorted(final_list, key=lambda x: x['match_percentage'], reverse=True)
-
-        return {"success": True, "recommendations": final_list}
-
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"AI returned invalid JSON: {str(e)}"}
     except Exception as e:
         return {"success": False, "error": str(e)}
     finally:
-        if cursor: cursor.close(); db.close()
+        if cursor: cursor.close()
+        if db: db.close()

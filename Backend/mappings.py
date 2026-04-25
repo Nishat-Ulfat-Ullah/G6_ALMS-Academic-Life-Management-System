@@ -44,3 +44,87 @@ ARXIV_CATEGORY_MAP = {
     "cs.OS": "Operating Systems",
     "cs.DS": "Data Structures"
 }
+
+COURSE_SKILL_MAP = {
+    "Artificial Intelligence": [
+        "search algorithms",
+        "heuristic search",
+        "problem solving",
+        "knowledge representation",
+        "planning systems"
+    ],
+
+    "Machine Learning": [
+        "regression",
+        "classification",
+        "clustering",
+        "feature engineering",
+        "model evaluation",
+        "neural networks basics"
+    ],
+
+    "Neural Networks": [
+        "deep learning",
+        "backpropagation",
+        "CNN",
+        "RNN",
+        "PyTorch",
+        "TensorFlow"
+    ],
+
+    "Natural Language Processing": [
+        "text preprocessing",
+        "tokenization",
+        "transformers",
+        "word embeddings",
+        "language models",
+        "sentiment analysis"
+    ],
+
+    "Image Processing": [
+        "OpenCV",
+        "image filtering",
+        "edge detection",
+        "feature extraction",
+        "CNN basics"
+    ],
+
+    "Algorithms": [
+        "sorting",
+        "dynamic programming",
+        "graph algorithms",
+        "optimization",
+        "complexity analysis"
+    ],
+
+    "Data Structures": [
+        "arrays",
+        "trees",
+        "graphs",
+        "hash tables",
+        "stacks",
+        "queues"
+    ],
+
+    "Database Systems": [
+        "SQL",
+        "normalization",
+        "query optimization",
+        "transactions",
+        "indexing"
+    ],
+
+    "Robotics": [
+        "path planning",
+        "control systems",
+        "sensor fusion",
+        "SLAM"
+    ],
+
+    "Cybersecurity": [
+        "encryption",
+        "authentication",
+        "network security",
+        "penetration testing"
+    ]
+}

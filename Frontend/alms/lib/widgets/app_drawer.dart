@@ -82,12 +82,12 @@ class AppDrawer extends StatelessWidget {
           ),
           ListTile(
             leading: const Icon(Icons.psychology_alt),
-            title: const Text('Thesis Discovery'),
+            title: const Text('Thesis Recommender'),
             onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const ThesisDiscoveryPage(),
+                  builder: (context) => const ThesisRecommenderPage(),
                 ),
               );
             },
