@@ -5,7 +5,7 @@ import '../services/study_analyzer_service.dart';
 class AddTaskScreen extends StatefulWidget {
   final String userId; 
 
-  const AddTaskScreen({Key? key, required this.userId}) : super(key: key);
+  const AddTaskScreen({super.key, required this.userId});
 
   @override
   _AddTaskScreenState createState() => _AddTaskScreenState();
@@ -96,7 +96,7 @@ class _AddTaskScreenState extends State<AddTaskScreen> {
               const SizedBox(height: 16),
 
               DropdownButtonFormField<String>(
-                value: _selectedTaskType,
+                initialValue: _selectedTaskType,
                 decoration: const InputDecoration(labelText: 'Task Type'),
                 items: _taskTypes.map((String type) {
                   return DropdownMenuItem(value: type, child: Text(type));

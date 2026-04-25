@@ -1,10 +1,16 @@
-from fastapi import FastAPI, UploadFile, File, Form, Query
+from fastapi import FastAPI, UploadFile, File, Form, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, field_validator
 from typing import Dict, List
 from datetime import date, timedelta
 from typing import Optional
+from mappings import CURRICULUM_MAP, ARXIV_CATEGORY_MAP, COURSE_SKILL_MAP
+from openai import OpenAI
+
+import json
+import requests
+import xml.etree.ElementTree as ET
 import mysql.connector
 import os
 import shutil
@@ -14,6 +20,9 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
+import re
+
+
 
 
 UPLOAD_DIR = "uploads"
@@ -146,6 +155,11 @@ class CourseOutline(BaseModel):
 class DeleteCourse(BaseModel):
     user_id: str
     course_code: str
+#THESIS
+class UserInterest(BaseModel):
+    user_id: str
+    interests: List[str]
+
 
 # ===================== HELPERS =====================
 
@@ -159,9 +173,10 @@ def get_db():
         password="123",
         database="project"
     )
-#loads the variables from .env file
+
 load_dotenv()
 
+# ===================== Nishat env =====================
 # Sender credentials here
 SENDER_EMAIL = os.getenv("EMAIL_USER")
 APP_PASSWORD = os.getenv("EMAIL_PASS")
@@ -188,6 +203,11 @@ def send_notification_email(to_email: str, subject: str, body: str):
         print(f"Email successfully sent to {to_email}")
     except Exception as e:
         print(f"Failed to send email to {to_email}: {e}")
+
+# ===================== Zaheen env =====================
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 
 # ===================== USER SYSTEM =====================
 @app.post("/register")
@@ -1163,3 +1183,232 @@ def get_comments(note_id: int):
     """, (note_id,))
 
     return {"comments": cursor.fetchall()}
+
+
+# ===================== THESIS RECOMMENDER SYSTEM =====================
+
+# --- THE SCRAPER  ---
+def fetch_real_research_from_arxiv(interest_tags):
+    try:
+        if not interest_tags:
+            interest_tags = ["Artificial Intelligence"]
+
+        search_query = "+OR+".join(
+            [f"all:{tag.replace(' ', '+')}" for tag in interest_tags]
+        )
+
+        # Increase max_results from 15 to 30
+        url = f"http://export.arxiv.org/api/query?search_query={search_query}&start=0&max_results=30"
+
+        response = requests.get(url, timeout=10)
+        if response.status_code != 200:
+            return []
+
+        root = ET.fromstring(response.content)
+        results = []
+        ns = {
+            'atom': 'http://www.w3.org/2005/Atom',
+            'arxiv': 'http://arxiv.org/schemas/atom'
+        }
+
+        for entry in root.findall('atom:entry', ns):
+            title_node = entry.find('atom:title', ns)
+            id_node = entry.find('atom:id', ns)
+            summary_node = entry.find('atom:summary', ns)  # grab abstract too
+
+            if title_node is None or id_node is None:
+                continue
+
+            title = title_node.text.strip()
+            link = id_node.text.strip()
+            summary = summary_node.text.strip()[:200] if summary_node is not None else ""
+
+            category_node = entry.find('arxiv:primary_category', ns)
+            raw = category_node.attrib["term"] if category_node is not None else "cs.AI"
+            domain = ARXIV_CATEGORY_MAP.get(raw, raw)
+
+            results.append({
+                "topic": title,
+                "domain": domain,
+                "url": link,
+                "summary": summary   # now includes abstract snippet
+            })
+
+        return results
+
+    except Exception as e:
+        print("ARXIV ERROR:", e)
+        return []
+# --- ENDPOINTS ---
+
+@app.post("/api/interests/update")
+def update_interests(data: UserInterest):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        # Clean out old interests and insert new ones
+        cursor.execute("DELETE FROM user_interests WHERE user_id = %s", (data.user_id,))
+        for tag in data.interests:
+            cursor.execute("INSERT INTO user_interests (user_id, interest_tag) VALUES (%s, %s)", (data.user_id, tag))
+        db.commit()
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.get("/api/interests/{user_id}")
+def get_user_interests(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("SELECT interest_tag FROM user_interests WHERE user_id=%s", (user_id,))
+        # Extract just the strings into a list
+        interests = [row['interest_tag'] for row in cursor.fetchall()]
+        return {"success": True, "interests": interests}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close(); db.close()
+
+def extract_skills(courses_raw):
+    skills = []
+
+    for c in courses_raw:
+        code = str(c["course_code"])
+
+        if code in COURSE_SKILL_MAP:
+            skills.extend(COURSE_SKILL_MAP[code])
+
+        # fallback mapping from curriculum
+        if code in CURRICULUM_MAP:
+            skills.append(CURRICULUM_MAP[code])
+
+    return list(set(skills))
+
+
+
+
+client = OpenAI(
+    api_key=OPENAI_API_KEY,
+    base_url="https://models.inference.ai.azure.com"  
+)
+
+
+
+def format_papers_for_prompt(papers: list) -> str:
+    if not papers:
+        return "No recent papers found."
+    lines = []
+    # Increased from 8 to 20
+    for i, p in enumerate(papers[:20], 1):
+        lines.append(f"{i}. [{p['domain']}] {p['topic']} — {p['url']}")
+        if p.get("summary"):
+            lines.append(f"   Abstract: {p['summary']}")
+    return "\n".join(lines)
+
+
+def generate_thesis_ideas(interests: list, skills: list, papers: list) -> list:
+    papers_text = format_papers_for_prompt(papers)
+
+    prompt = f"""You are an expert academic research advisor helping an undergraduate student find a thesis topic.
+
+Student profile:
+- Research interests: {", ".join(interests) if interests else "General AI/CS"}
+- Skills from completed courses: {", ".join(skills) if skills else "Programming fundamentals"}
+
+Recent trending research for inspiration (do NOT copy these — use them only as context):
+{papers_text}
+
+Generate exactly 5 unique, original thesis ideas tailored to this student's profile.
+
+Rules:
+- Ideas must be feasible for a 1-year undergraduate thesis
+- Each idea must combine the student's interests AND skills
+- Titles must be specific, not generic
+- Methodology must be concrete and actionable
+- related_research MUST contain exactly 3 papers from the list above
+- related_papers MUST contain the matching URLs for those 3 papers in the same order
+
+Return ONLY a valid JSON array, no markdown, no extra text:
+[
+  {{
+    "title": "...",
+    "description": "...",
+    "methodology": "...",
+    "tools": ["...", "..."],
+    "difficulty": "Low|Medium|High",
+    "related_research": ["paper title 1", "paper title 2", "paper title 3"],
+    "paper_urls": ["url1", "url2", "url3"]
+  }}
+]"""
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are an academic thesis advisor. Always respond with valid JSON only."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.8,
+        max_tokens=3000  # increased from 2000 to fit more content
+    )
+
+    raw = response.choices[0].message.content.strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+
+    ideas = json.loads(raw)
+
+    # Re-attach real URLs from ArXiv by matching titles
+    paper_url_map = {p["topic"]: p["url"] for p in papers}
+    for idea in ideas:
+        idea["paper_urls"] = [
+            paper_url_map.get(title, "")
+            for title in idea.get("related_research", [])
+        ]
+
+    return ideas
+
+@app.get("/api/generate_thesis/{user_id}")
+def generate_thesis(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+
+        # 1. Fetch interests
+        cursor.execute(
+            "SELECT interest_tag FROM user_interests WHERE user_id = %s",
+            (user_id,)
+        )
+        interests = [row["interest_tag"] for row in cursor.fetchall()]
+
+        # 2. Fetch completed courses and extract skills
+        cursor.execute(
+            "SELECT course_code FROM course_outlines WHERE user_id = %s AND status = 'Completed'",
+            (user_id,)
+        )
+        courses_raw = cursor.fetchall()
+        skills = extract_skills(courses_raw)
+
+        # 3. Fetch trending ArXiv papers based on interests
+        papers = fetch_real_research_from_arxiv(interests or ["Artificial Intelligence"])
+        
+        if not isinstance(papers, list):
+            papers = []
+
+        # 4. Generate ideas via AI (the actual call, finally!)
+        ideas = generate_thesis_ideas(interests, skills, papers)
+
+        return {"success": True, "ideas": ideas}
+
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"AI returned invalid JSON: {str(e)}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()

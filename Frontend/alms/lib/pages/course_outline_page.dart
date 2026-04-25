@@ -66,8 +66,12 @@ class _CourseOutlinePageState extends State<CourseOutlinePage> {
   // --- Organizes courses into their respective categories ---
   Map<String, List<dynamic>> get groupedCourses {
     Map<String, List<dynamic>> map = {};
-    for (var cat in mainCategories) map[cat] = [];
-    for (var stream in uniCoreStreams) map[stream] = [];
+    for (var cat in mainCategories) {
+      map[cat] = [];
+    }
+    for (var stream in uniCoreStreams) {
+      map[stream] = [];
+    }
 
     for (var c in courses) {
       String stream = c['stream'];
@@ -143,7 +147,7 @@ class _CourseOutlinePageState extends State<CourseOutlinePage> {
                 // --- First Dropdown: Main Category ---
                 DropdownButtonFormField<String>(
                   isExpanded: true, 
-                  value: mainCategory,
+                  initialValue: mainCategory,
                   decoration: const InputDecoration(labelText: "Course Category"),
                   items: mainCategories.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 14)))).toList(),
                   onChanged: (v) {
@@ -158,7 +162,7 @@ class _CourseOutlinePageState extends State<CourseOutlinePage> {
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: subStream,
+                    initialValue: subStream,
                     decoration: const InputDecoration(labelText: "Select Stream"),
                     items: uniCoreStreams.map((s) => DropdownMenuItem(
                       value: s, 
