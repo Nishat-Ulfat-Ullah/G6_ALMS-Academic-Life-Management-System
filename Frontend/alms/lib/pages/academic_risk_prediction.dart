@@ -5,7 +5,7 @@ import 'dart:io';
 
 class AcademicRiskScreen extends StatefulWidget {
   final String userId;
-  const AcademicRiskScreen({Key? key, required this.userId}) : super(key: key);
+  const AcademicRiskScreen({super.key, required this.userId});
 
   @override
   _AcademicRiskScreenState createState() => _AcademicRiskScreenState();

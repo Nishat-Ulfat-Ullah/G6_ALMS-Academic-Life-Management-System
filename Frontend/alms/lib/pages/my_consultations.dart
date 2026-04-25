@@ -67,7 +67,7 @@ class _MyConsultationsState extends State<MyConsultations> {
           "booking_id": bookingId,
           "status": newStatus,
           // Include the summary if it was provided
-          if (summaryText != null) "summary": summaryText, 
+          "summary": ?summaryText, 
         }),
       );
 

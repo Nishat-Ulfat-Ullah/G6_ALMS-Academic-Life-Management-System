@@ -3,6 +3,7 @@ import 'package:alms/pages/my_consultations.dart';
 import 'package:alms/pages/study_dashboard_screen.dart';
 import 'package:alms/pages/course_outline_page.dart';
 import 'package:alms/widgets/user_session.dart';
+import 'package:alms/pages/thesis_recommender.dart';
 
 class AppDrawer extends StatelessWidget {
   final String? userId;
@@ -14,9 +15,7 @@ class AppDrawer extends StatelessWidget {
     return Drawer(
       child: Column(
         children: [
-          const DrawerHeader(
-            child: Icon(Icons.favorite, size: 48),
-          ),
+          const DrawerHeader(child: Icon(Icons.favorite, size: 48)),
           ListTile(
             leading: const Icon(Icons.home),
             title: const Text('H O M E'),
@@ -35,7 +34,8 @@ class AppDrawer extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => MyConsultations(userId: UserSession.userId!),
+                    builder: (context) =>
+                        MyConsultations(userId: UserSession.userId!),
                   ),
                 );
               }
@@ -51,7 +51,7 @@ class AppDrawer extends StatelessWidget {
             title: const Text('BROWSE NOTES'),
             onTap: () => Navigator.pushNamed(context, '/browsenotes'),
           ),
-          
+
           // --- NEW STUDY LOAD ANALYZER MENU ITEM ---
           ListTile(
             leading: const Icon(Icons.analytics_outlined),
@@ -61,7 +61,8 @@ class AppDrawer extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => StudyDashboardScreen(userId: UserSession.userId!),
+                    builder: (context) =>
+                        StudyDashboardScreen(userId: UserSession.userId!),
                   ),
                 );
               }
@@ -74,36 +75,46 @@ class AppDrawer extends StatelessWidget {
               if (UserSession.userId != null) {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => CourseOutlinePage(),
-                  ),
+                  MaterialPageRoute(builder: (context) => CourseOutlinePage()),
                 );
               }
             },
           ),
-          // -----------------------------------------
-
           ListTile(
-            leading: const Icon(Icons.center_focus_strong), 
+            leading: const Icon(Icons.psychology_alt),
+            title: const Text('Thesis Recommender'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ThesisRecommenderPage(),
+                ),
+              );
+            },
+          ),
+
+          // -----------------------------------------
+          ListTile(
+            leading: const Icon(Icons.center_focus_strong),
             title: const Text('FOCUS MODE'),
             onTap: () {
               if (UserSession.userId != null) {
                 Navigator.pushNamed(
-                  context, 
-                  '/focusmode', 
+                  context,
+                  '/focusmode',
                   arguments: UserSession.userId!,
                 );
               }
             },
           ),
           ListTile(
-            leading: const Icon(Icons.center_focus_strong), 
+            leading: const Icon(Icons.center_focus_strong),
             title: const Text('Academic Risk Prediction'),
             onTap: () {
               if (UserSession.userId != null) {
                 Navigator.pushNamed(
-                  context, 
-                  '/academicrisk', 
+                  context,
+                  '/academicrisk',
                   arguments: UserSession.userId!,
                 );
               }
@@ -114,6 +125,7 @@ class AppDrawer extends StatelessWidget {
             title: const Text('S E T T I N G S'),
             onTap: () => Navigator.pushNamed(context, '/settingspage'),
           ),
+
         ],
       ),
     );
