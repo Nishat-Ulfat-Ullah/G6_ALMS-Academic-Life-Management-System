@@ -99,22 +99,24 @@ class FocusSession(BaseModel):
     duration_seconds: int
 
 
-class PerformanceUpdate(BaseModel):
+class RiskInput(BaseModel):
     user_id: str
-    attendance_count: int
+    attendance: int
+    total_classes: int
     cgpa: float
     missed_deadlines: int
     low_quizzes: int
 
-class StudentPerformance(BaseModel):
+class AttendanceInput(BaseModel):
     user_id: str
-    attendance_count: int
     total_classes: int
-    cgpa: float
-    missed_deadlines: int
-    total_deadlines: int
-    low_quizzes: int
-    total_quizzes: int
+    attended_classes: int
+class ExamCountdownModel(BaseModel):
+    user_id: str
+    title: str
+    exam_type: str
+    exam_date: str # YYYY-MM-DD
+    calendar_event_id: Optional[str] = None
 
 # --- Shehraj ---
 class AcademicTask(BaseModel):
@@ -746,65 +748,142 @@ def save_focus_session(session: FocusSession):
         if db: db.close()
 
 
-@app.get("/api/academic_risk/{user_id}")
-def get_academic_risk(user_id: str):
-    db = cursor = None
-    try:
-        db = get_db()
-        cursor = db.cursor(dictionary=True)
-        
-        cursor.execute("SELECT * FROM student_performance WHERE user_id = %s", (user_id,))
-        stats = cursor.fetchone()
+@app.post("/api/calculate_risk")
+def calculate_risk(data: RiskInput):
+    # 1. Calculate Attendance Rate (preventing division by zero)
+    att_rate = (data.attendance / data.total_classes) if data.total_classes > 0 else 0
+    
+    # 2. Calculate Risk Points (Using your exact old logic)
+    att_risk = 25 if att_rate < 0.75 else 0
+    cgpa_risk = 25 if data.cgpa < 3.0 else 0
+    deadline_risk = min(data.missed_deadlines * 12.5, 25)
+    quiz_risk = min(data.low_quizzes * 12.5, 25)
+    
+    # 3. Sum total score
+    total_score = att_risk + cgpa_risk + deadline_risk + quiz_risk
 
-        if not stats:
-            return {
-                "success": True, 
-                "risk_score": 0, 
-                "zone": "Low", 
-                "suggestion": "No data found. Keep studying!",
-                "details": {"attendance": 0, "total_classes": 20, "cgpa": 0.0, "missed_deadlines": 0, "total_deadlines": 7, "low_quizzes": 0, "total_quizzes": 4}
-            }
+    # 4. Determine Zone & Suggestion (Using your exact old thresholds)
+    if total_score >= 70:
+        zone = "High"
+        suggestion = "Critical risk: Please consult your faculty advisor."
+    elif total_score >= 40:
+        zone = "Medium"
+        suggestion = "Moderate risk: Improve attendance and quiz scores."
+    else:
+        zone = "Low"
+        suggestion = "Low risk: You are performing well!"
 
-        # Calculation Logic
-        att_rate = stats["attendance_count"] / stats["total_classes"]
-        
-        # Risk points
-        att_risk = 25 if att_rate < 0.75 else 0
-        cgpa_risk = 25 if float(stats["cgpa"]) < 3.0 else 0
-        deadline_risk = min(stats["missed_deadlines"] * 12.5, 25)
-        quiz_risk = min(stats["low_quizzes"] * 12.5, 25)
-        
-        total_score = att_risk + cgpa_risk + deadline_risk + quiz_risk
-
-        if total_score >= 70:
-            zone, suggestion = "High", "Critical risk: Please consult your faculty advisor."
-        elif total_score >= 40:
-            zone, suggestion = "Medium", "Moderate risk: Improve attendance and quiz scores."
-        else:
-            zone, suggestion = "Low", "Low risk: You are performing well!"
-
-        return {
-            "success": True,
-            "risk_score": total_score,
-            "zone": zone,
-            "suggestion": suggestion,
-            "details": {
-                "attendance": stats["attendance_count"],
-                "total_classes": stats["total_classes"],
-                "cgpa": float(stats["cgpa"]),
-                "missed_deadlines": stats["missed_deadlines"],
-                "total_deadlines": stats["total_deadlines"],
-                "low_quizzes": stats["low_quizzes"],
-                "total_quizzes": stats["total_quizzes"]
-            }
+    # 5. Return exactly what Flutter is expecting to draw the UI
+    return {
+        "risk_score": total_score, 
+        "zone": zone,
+        "suggestion": suggestion,
+        "details": {
+            "attendance": data.attendance,
+            "total_classes": data.total_classes,
+            "cgpa": data.cgpa,
+            "missed_deadlines": data.missed_deadlines,
+            "total_deadlines": 7, 
+            "low_quizzes": data.low_quizzes,
+            "total_quizzes": 4
         }
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-    finally:
-        if cursor: cursor.close()
-        if db: db.close()
+    }
 
-        
+
+@app.post("/api/calculate_attendance")
+def calculate_attendance(data: AttendanceInput):
+    total = data.total_classes
+    attended = data.attended_classes
+
+    if total == 0 or attended > total:
+        return {"success": False, "error": "Invalid class numbers."}
+
+    percentage = (attended / total) * 100
+
+    # Math for 70% minimum requirement
+    can_miss = math.floor((attended / 0.70) - total)
+    need_to_attend = math.ceil((0.70 * total - attended) / 0.30)
+
+    if percentage >= 90:
+        status = "Very Good"
+        suggestion = "Great job! You have excellent attendance."
+    elif percentage >= 70:
+        status = "Safe"
+        suggestion = "You are above the 70% minimum limit. Keep it up!"
+    else:
+        status = "Warning"
+        suggestion = "Warning! Your attendance is below the 70% requirement."
+
+    if can_miss > 0:
+        missable_text = f"You can safely miss {can_miss} upcoming classes."
+    elif can_miss == 0 and percentage >= 70:
+        missable_text = "You are exactly at the limit. Do not miss the next class!"
+    else:
+        missable_text = f"You must attend {need_to_attend} more classes in a row to reach 70%."
+
+    return {
+        "success": True,
+        "percentage": percentage,
+        "total": total,
+        "attended": attended,
+        "status": status,
+        "suggestion": suggestion,
+        "missable_text": missable_text
+    }
+
+@app.post("/api/exams/add")
+def add_exam_countdown(exam: ExamCountdownModel):
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO exam_countdowns (user_id, title, exam_type, exam_date, calendar_event_id)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (exam.user_id, exam.title, exam.exam_type, exam.exam_date, exam.calendar_event_id))
+        db.commit()
+        return {"success": True, "id": cursor.lastrowid}
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+@app.get("/api/exams/{user_id}")
+def get_exams(user_id: str):
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    #1. AUTO-CLEANUP: Delete past exams before returning the list!
+    cursor.execute("DELETE FROM exam_countdowns WHERE user_id = %s AND exam_date < CURDATE()", (user_id,))
+    db.commit()
+
+    #2. Fetch remaining upcoming exams and calculate days left
+    cursor.execute("""
+        SELECT id, title, exam_type, exam_date, calendar_event_id,
+        DATEDIFF(exam_date, CURDATE()) as days_left 
+        FROM exam_countdowns 
+        WHERE user_id = %s 
+        ORDER BY exam_date ASC
+    """, (user_id,))
+
+    exams = cursor.fetchall()
+
+    #Format dates as strings for JSON
+    for exam in exams:
+        exam['exam_date'] = exam['exam_date'].strftime('%Y-%m-%d')
+
+    return {"success": True, "data": exams}
+
+@app.delete("/api/exams/delete/{exam_id}")
+def delete_exam(exam_id: int):
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("DELETE FROM exam_countdowns WHERE id = %s", (exam_id,))
+        db.commit()
+        return {"success": True}
+    except Exception as e:
+        db.rollback()
+        return {"success": False, "error": str(e)}
+
+
 # ===================== SMART STUDY LOAD ANALYZER =====================
 
 @app.post("/api/tasks/add")

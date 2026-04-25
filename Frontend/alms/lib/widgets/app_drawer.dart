@@ -3,6 +3,7 @@ import 'package:alms/pages/my_consultations.dart';
 import 'package:alms/pages/study_dashboard_screen.dart';
 import 'package:alms/pages/course_outline_page.dart';
 import 'package:alms/widgets/user_session.dart';
+import 'package:alms/pages/exam_countdown.dart'; 
 
 class AppDrawer extends StatelessWidget {
   final String? userId;
@@ -12,11 +13,11 @@ class AppDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Drawer(
-      child: Column(
+      // 1. CHANGE 'Column' to 'ListView' right here!
+      child: ListView(
+        padding: EdgeInsets.zero, // 2. Add this to fix top spacing
         children: [
-          const DrawerHeader(
-            child: Icon(Icons.favorite, size: 48),
-          ),
+          const DrawerHeader(child: Icon(Icons.favorite, size: 48)),
           ListTile(
             leading: const Icon(Icons.home),
             title: const Text('H O M E'),
@@ -35,7 +36,8 @@ class AppDrawer extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => MyConsultations(userId: UserSession.userId!),
+                    builder: (context) =>
+                        MyConsultations(userId: UserSession.userId!),
                   ),
                 );
               }
@@ -51,8 +53,6 @@ class AppDrawer extends StatelessWidget {
             title: const Text('BROWSE NOTES'),
             onTap: () => Navigator.pushNamed(context, '/browsenotes'),
           ),
-          
-          // --- NEW STUDY LOAD ANALYZER MENU ITEM ---
           ListTile(
             leading: const Icon(Icons.analytics_outlined),
             title: const Text('STUDY LOAD ANALYZER'),
@@ -61,50 +61,72 @@ class AppDrawer extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => StudyDashboardScreen(userId: UserSession.userId!),
+                    builder: (context) =>
+                        StudyDashboardScreen(userId: UserSession.userId!),
                   ),
                 );
               }
             },
           ),
           ListTile(
-            leading: const Icon(Icons.school), // Graduation cap icon
+            leading: const Icon(Icons.school), 
             title: const Text('COURSE OUTLINE'),
             onTap: () {
               if (UserSession.userId != null) {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => CourseOutlinePage(),
-                  ),
+                  MaterialPageRoute(builder: (context) => CourseOutlinePage()),
                 );
               }
             },
           ),
-          // -----------------------------------------
+          
 
           ListTile(
-            leading: const Icon(Icons.center_focus_strong), 
+            leading: const Icon(Icons.center_focus_strong),
             title: const Text('FOCUS MODE'),
             onTap: () {
               if (UserSession.userId != null) {
                 Navigator.pushNamed(
-                  context, 
-                  '/focusmode', 
+                  context,
+                  '/focusmode',
                   arguments: UserSession.userId!,
                 );
               }
             },
           ),
           ListTile(
-            leading: const Icon(Icons.center_focus_strong), 
+            leading: const Icon(Icons.warning_amber_rounded),
             title: const Text('Academic Risk Prediction'),
             onTap: () {
               if (UserSession.userId != null) {
                 Navigator.pushNamed(
-                  context, 
-                  '/academicrisk', 
+                  context,
+                  '/academicrisk',
                   arguments: UserSession.userId!,
+                );
+              }
+            },
+          ),
+
+          // Assuming you have a route for Attendance Tracker based on your screenshot
+          ListTile(
+            leading: const Icon(Icons.fact_check_outlined),
+            title: const Text('Attendance Tracker'),
+            onTap: () => Navigator.pushNamed(context, '/attendancetracker'), 
+          ),
+
+          ListTile(
+            leading: const Icon(Icons.event_available), 
+            title: const Text('Exam Countdowns'),
+            onTap: () {
+              if (UserSession.userId != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => 
+                        ExamCountdownPage(userId: UserSession.userId!),
+                  ),
                 );
               }
             },

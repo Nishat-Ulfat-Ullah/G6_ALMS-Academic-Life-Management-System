@@ -12,6 +12,9 @@ import 'package:alms/pages/browse_page.dart';
 import 'package:alms/pages/focusmode.dart';
 import 'package:alms/pages/consultation_history.dart';
 import 'package:alms/pages/academic_risk_prediction.dart';
+import 'package:alms/pages/attendance_tracker.dart';
+import 'package:alms/widgets/user_session.dart';
+
 
 void main() {
   runApp(const ALMS());
@@ -52,6 +55,17 @@ class ALMS extends StatelessWidget {
         '/academicrisk': (context) {
           final userId = ModalRoute.of(context)!.settings.arguments as String;
           return AcademicRiskScreen(userId: userId);
+        },
+        '/attendancetracker': (context) {
+          // 1. Try to grab the argument from the navigation call
+          final args = ModalRoute.of(context)?.settings.arguments;
+
+          // 2. Check: Is it a String? If not, check UserSession. If both fail, use a fallback.
+          final String userId = (args is String) 
+              ? args 
+              : (UserSession.userId ?? "unknown_user");
+
+          return AttendanceTrackerScreen(userId: userId);
         },
         '/history': (context) {
           final userId = ModalRoute.of(context)!.settings.arguments as String;
