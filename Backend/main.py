@@ -1082,17 +1082,15 @@ def fetch_real_research_from_arxiv(interest_tags):
             [f"all:{tag.replace(' ', '+')}" for tag in interest_tags]
         )
 
-        url =f"http://export.arxiv.org/api/query?search_query={search_query}&start=0&max_results=40"
+        # Increase max_results from 15 to 30
+        url = f"http://export.arxiv.org/api/query?search_query={search_query}&start=0&max_results=30"
 
         response = requests.get(url, timeout=10)
-
         if response.status_code != 200:
             return []
 
         root = ET.fromstring(response.content)
-
         results = []
-
         ns = {
             'atom': 'http://www.w3.org/2005/Atom',
             'arxiv': 'http://arxiv.org/schemas/atom'
@@ -1101,22 +1099,24 @@ def fetch_real_research_from_arxiv(interest_tags):
         for entry in root.findall('atom:entry', ns):
             title_node = entry.find('atom:title', ns)
             id_node = entry.find('atom:id', ns)
+            summary_node = entry.find('atom:summary', ns)  # grab abstract too
 
             if title_node is None or id_node is None:
                 continue
 
             title = title_node.text.strip()
             link = id_node.text.strip()
+            summary = summary_node.text.strip()[:200] if summary_node is not None else ""
 
             category_node = entry.find('arxiv:primary_category', ns)
             raw = category_node.attrib["term"] if category_node is not None else "cs.AI"
-
             domain = ARXIV_CATEGORY_MAP.get(raw, raw)
 
             results.append({
                 "topic": title,
                 "domain": domain,
-                "url": link
+                "url": link,
+                "summary": summary   # now includes abstract snippet
             })
 
         return results
@@ -1124,7 +1124,6 @@ def fetch_real_research_from_arxiv(interest_tags):
     except Exception as e:
         print("ARXIV ERROR:", e)
         return []
-
 # --- ENDPOINTS ---
 
 @app.post("/api/interests/update")
@@ -1189,8 +1188,11 @@ def format_papers_for_prompt(papers: list) -> str:
     if not papers:
         return "No recent papers found."
     lines = []
-    for i, p in enumerate(papers[:8], 1):
+    # Increased from 8 to 20
+    for i, p in enumerate(papers[:20], 1):
         lines.append(f"{i}. [{p['domain']}] {p['topic']} — {p['url']}")
+        if p.get("summary"):
+            lines.append(f"   Abstract: {p['summary']}")
     return "\n".join(lines)
 
 
@@ -1211,9 +1213,10 @@ Generate exactly 5 unique, original thesis ideas tailored to this student's prof
 Rules:
 - Ideas must be feasible for a 1-year undergraduate thesis
 - Each idea must combine the student's interests AND skills
-- Titles must be specific, not generic (avoid "AI-Based System for X")
+- Titles must be specific, not generic
 - Methodology must be concrete and actionable
-- Related papers should reference actual papers from the list above when relevant
+- related_research MUST contain exactly 3 papers from the list above
+- related_papers MUST contain the matching URLs for those 3 papers in the same order
 
 Return ONLY a valid JSON array, no markdown, no extra text:
 [
@@ -1223,8 +1226,8 @@ Return ONLY a valid JSON array, no markdown, no extra text:
     "methodology": "...",
     "tools": ["...", "..."],
     "difficulty": "Low|Medium|High",
-    "related_research": ["paper title 1", "paper title 2"],
-    "paper_urls": ["url1", "url2"]
+    "related_research": ["paper title 1", "paper title 2", "paper title 3"],
+    "paper_urls": ["url1", "url2", "url3"]
   }}
 ]"""
 
@@ -1235,28 +1238,24 @@ Return ONLY a valid JSON array, no markdown, no extra text:
             {"role": "user", "content": prompt}
         ],
         temperature=0.8,
-        max_tokens=2000
+        max_tokens=3000  # increased from 2000 to fit more content
     )
 
     raw = response.choices[0].message.content.strip()
-
-    # Strip markdown code fences if present
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
 
     ideas = json.loads(raw)
 
-    # Attach real paper URLs from ArXiv to matching ideas
+    # Re-attach real URLs from ArXiv by matching titles
     paper_url_map = {p["topic"]: p["url"] for p in papers}
     for idea in ideas:
         idea["paper_urls"] = [
-            paper_url_map[title]
+            paper_url_map.get(title, "")
             for title in idea.get("related_research", [])
-            if title in paper_url_map
         ]
 
     return ideas
-
 
 @app.get("/api/generate_thesis/{user_id}")
 def generate_thesis(user_id: str):
