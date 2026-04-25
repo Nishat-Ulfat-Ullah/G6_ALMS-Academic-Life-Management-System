@@ -18,13 +18,10 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
   List<dynamic> _recommendations = [];
   bool _loading = false;
   List<String> _selectedInterests = [];
-
-  // Dynamic interest pool — fetched from backend or falls back to defaults
   List<String> _availableInterests = [];
 
   final String _host = Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
 
-  // Default interests shown if backend returns nothing
   static const List<String> _defaultInterests = [
     "AI", "Machine Learning", "NLP", "Cybersecurity",
     "Blockchain", "Robotics", "Data Science", "Computer Vision",
@@ -39,13 +36,12 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
 
   Future<void> _initPage() async {
     await Future.wait([
-      _loadSavedInterests(),   // load what user already picked
-      _loadAvailableInterests(), // load the interest pool
+      _loadSavedInterests(),
+      _loadAvailableInterests(),
     ]);
     await fetchRecommendations();
   }
 
-  // Load saved interests from DB so checkboxes reflect real state
   Future<void> _loadSavedInterests() async {
     try {
       final res = await http.get(
@@ -62,8 +58,6 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
     }
   }
 
-  // Optionally load dynamic interest options from backend
-  // Falls back to hardcoded defaults if endpoint doesn't exist
   Future<void> _loadAvailableInterests() async {
     try {
       final res = await http.get(
@@ -79,7 +73,6 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
         }
       }
     } catch (_) {}
-    // fallback
     setState(() => _availableInterests = _defaultInterests);
   }
 
@@ -135,7 +128,6 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Custom interest input
                   Row(
                     children: [
                       Expanded(
@@ -161,11 +153,10 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
                             customController.clear();
                           }
                         },
-                      )
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // Scrollable checkbox list
                   Flexible(
                     child: SingleChildScrollView(
                       child: Column(
@@ -238,73 +229,113 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
           child: ListView(
             controller: controller,
             children: [
-              // Title
+              // Drag handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+
               Text(
                 item["title"] ?? "Untitled",
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-
-              // Difficulty badge
               _difficultyBadge(item["difficulty"]),
               const SizedBox(height: 16),
 
-              // Description
-              const Text("Description", style: TextStyle(fontWeight: FontWeight.bold)),
+              _sectionLabel("Description"),
               const SizedBox(height: 4),
-              Text(item["description"] ?? "", style: const TextStyle(fontSize: 13)),
+              Text(item["description"] ?? "",
+                  style: const TextStyle(fontSize: 13)),
               const SizedBox(height: 16),
 
-              // Methodology
-              if (item["methodology"] != null) ...[
-                const Text("Methodology", style: TextStyle(fontWeight: FontWeight.bold)),
+              if (item["methodology"] != null &&
+                  item["methodology"].toString().isNotEmpty) ...[
+                _sectionLabel("Methodology"),
                 const SizedBox(height: 4),
-                Text(item["methodology"], style: const TextStyle(fontSize: 13)),
+                Text(item["methodology"].toString(),
+                    style: const TextStyle(fontSize: 13)),
                 const SizedBox(height: 16),
               ],
 
-              // Tools
-              const Text("Tools & Technologies", style: TextStyle(fontWeight: FontWeight.bold)),
+              _sectionLabel("Tools & Technologies"),
               const SizedBox(height: 6),
               Wrap(
                 spacing: 6,
                 runSpacing: 4,
-                children: (item["tools"] ?? []).map<Widget>((t) => Chip(
-                  label: Text(t.toString(), style: const TextStyle(fontSize: 11)),
-                  visualDensity: VisualDensity.compact,
-                  backgroundColor: Colors.blue.shade50,
-                )).toList(),
+                children: (item["tools"] ?? [])
+                    .map<Widget>((t) => Chip(
+                          label: Text(t.toString(),
+                              style: const TextStyle(fontSize: 11)),
+                          visualDensity: VisualDensity.compact,
+                          backgroundColor: Colors.blue.shade50,
+                        ))
+                    .toList(),
               ),
               const SizedBox(height: 16),
 
-              // Related papers with clickable links
               if (relatedResearch.isNotEmpty) ...[
-                const Text("Related Research", style: TextStyle(fontWeight: FontWeight.bold)),
+                _sectionLabel("Related Research (${relatedResearch.length})"),
                 const SizedBox(height: 6),
                 ...List.generate(relatedResearch.length, (i) {
-                  final url = i < paperUrls.length ? paperUrls[i] : null;
-                  return ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.article_outlined, size: 16),
-                    title: Text(
-                      relatedResearch[i].toString(),
-                      style: const TextStyle(fontSize: 12),
+                  final url = i < paperUrls.length
+                      ? paperUrls[i].toString()
+                      : null;
+                  final hasUrl = url != null && url.isNotEmpty;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.grey.shade200),
                     ),
-                    trailing: url != null
-                      ? IconButton(
-                          icon: const Icon(Icons.open_in_new, size: 16, color: Colors.blue),
-                          onPressed: () => openLink(url),
-                        )
-                      : null,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.article_outlined,
+                            size: 16, color: Colors.grey),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            relatedResearch[i].toString(),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        if (hasUrl)
+                          GestureDetector(
+                            onTap: () => openLink(url),
+                            child: const Padding(
+                              padding: EdgeInsets.only(left: 6),
+                              child: Icon(Icons.open_in_new,
+                                  size: 16, color: Colors.blue),
+                            ),
+                          ),
+                      ],
+                    ),
                   );
                 }),
               ],
+
+              const SizedBox(height: 20),
             ],
           ),
         ),
       ),
     );
+  }
+
+  // ---------------- HELPERS ----------------
+  Widget _sectionLabel(String text) {
+    return Text(text,
+        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13));
   }
 
   Widget _difficultyBadge(String? difficulty) {
@@ -315,7 +346,7 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
     };
     final color = colors[difficulty] ?? Colors.grey;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: color.withOpacity(0.15),
         borderRadius: BorderRadius.circular(20),
@@ -323,7 +354,8 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
       ),
       child: Text(
         difficulty ?? "Unknown",
-        style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+        style: TextStyle(
+            fontSize: 10, color: color, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -333,57 +365,63 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
     return GestureDetector(
       onTap: () => showThesisDetail(item),
       child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Title
               Text(
                 item["title"] ?? "Untitled",
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 12),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 5),
+              _difficultyBadge(item["difficulty"]),
+              const SizedBox(height: 6),
+              Text(
+                item["description"] ?? "",
+                style: const TextStyle(fontSize: 10, color: Colors.black87),
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 6),
-
-              // Difficulty badge
-              _difficultyBadge(item["difficulty"]),
-              const SizedBox(height: 8),
-
-              // Description — no Expanded needed, just let it flow
-              Text(
-                item["description"] ?? "",
-                style: const TextStyle(fontSize: 11, color: Colors.black87),
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const Spacer(),
-              const Divider(height: 12),
-
-              // Tools chips
+              const Divider(height: 8),
               Wrap(
-                spacing: 4,
+                spacing: 3,
                 runSpacing: 2,
-                children: (item["tools"] ?? []).take(3).map<Widget>((t) => Chip(
-                  label: Text(t.toString(), style: const TextStyle(fontSize: 9)),
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                )).toList(),
+                children: (item["tools"] ?? [])
+                    .take(2)
+                    .map<Widget>((t) => Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.blue.shade100),
+                          ),
+                          child: Text(
+                            t.toString(),
+                            style: const TextStyle(
+                                fontSize: 9, color: Colors.blue),
+                          ),
+                        ))
+                    .toList(),
               ),
               const SizedBox(height: 4),
-
-              // Tap hint
               const Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Text("Tap for details", style: TextStyle(fontSize: 9, color: Colors.grey)),
+                  Text("Tap for details",
+                      style: TextStyle(fontSize: 9, color: Colors.grey)),
                   SizedBox(width: 2),
                   Icon(Icons.arrow_forward_ios, size: 9, color: Colors.grey),
                 ],
-              )
+              ),
             ],
           ),
         ),
@@ -394,13 +432,14 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
   // ---------------- BUILD ----------------
   @override
   Widget build(BuildContext context) {
+    final cardWidth = (MediaQuery.of(context).size.width - 36) / 2;
+
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(
         title: const Text("Thesis Recommender"),
         backgroundColor: const Color.fromARGB(255, 138, 201, 243),
         actions: [
-          // Show selected interest count as badge
           Stack(
             children: [
               IconButton(
@@ -410,13 +449,15 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
               ),
               if (_selectedInterests.isNotEmpty)
                 Positioned(
-                  right: 6, top: 6,
+                  right: 6,
+                  top: 6,
                   child: CircleAvatar(
                     radius: 8,
                     backgroundColor: Colors.red,
                     child: Text(
                       "${_selectedInterests.length}",
-                      style: const TextStyle(fontSize: 9, color: Colors.white),
+                      style: const TextStyle(
+                          fontSize: 9, color: Colors.white),
                     ),
                   ),
                 ),
@@ -444,29 +485,33 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.lightbulb_outline, size: 48, color: Colors.grey),
+                  const Icon(Icons.lightbulb_outline,
+                      size: 48, color: Colors.grey),
                   const SizedBox(height: 12),
-                  const Text("No recommendations yet.", style: TextStyle(fontSize: 16)),
+                  const Text("No recommendations yet.",
+                      style: TextStyle(fontSize: 16)),
                   const SizedBox(height: 8),
                   ElevatedButton.icon(
                     onPressed: showInterestDialog,
                     icon: const Icon(Icons.add),
                     label: const Text("Set Your Interests"),
-                  )
+                  ),
                 ],
               ),
             )
           else
-            GridView.builder(
+            SingleChildScrollView(
               padding: const EdgeInsets.all(12),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 0.72,
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: _recommendations.map((item) {
+                  return SizedBox(
+                    width: cardWidth,
+                    child: buildCard(item),
+                  );
+                }).toList(),
               ),
-              itemCount: _recommendations.length,
-              itemBuilder: (context, i) => buildCard(_recommendations[i]),
             ),
         ],
       ),
