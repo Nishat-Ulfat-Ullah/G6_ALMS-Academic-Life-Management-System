@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart'; // Added for date formatting
 
 class BookConsultations extends StatefulWidget {
   const BookConsultations({super.key});
@@ -19,7 +20,7 @@ class _BookConsultationsState extends State<BookConsultations> {
 
   String? selectedCourse;
   String? selectedProvider;
-  String? selectedDay;
+  String? selectedDate; // Changed from selectedDay
   String? selectedTime;
   int? selectedRoutineId;
 
@@ -51,7 +52,7 @@ class _BookConsultationsState extends State<BookConsultations> {
 
   Future<void> _fetchRoutineForProvider(String providerId) async {
     setState(() {
-      selectedDay = null;
+      selectedDate = null;
       selectedTime = null;
       selectedRoutineId = null;
       availableRoutines = [];
@@ -70,7 +71,7 @@ class _BookConsultationsState extends State<BookConsultations> {
   }
 
   Future<void> _submitBooking(String studentId) async {
-    if (selectedCourse == null || selectedProvider == null || selectedDay == null || selectedTime == null || selectedRoutineId == null) {
+    if (selectedCourse == null || selectedProvider == null || selectedDate == null || selectedTime == null || selectedRoutineId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
       return;
     }
@@ -83,9 +84,9 @@ class _BookConsultationsState extends State<BookConsultations> {
           "student_id": studentId,
           "provider_id": selectedProvider,
           "course_name": selectedCourse,
-          "day_of_week": selectedDay,
+          "con_date": selectedDate, // Changed from day_of_week
           "time_slot": selectedTime,
-          "routine_id": selectedRoutineId, // Sending the unique slot ID
+          "routine_id": selectedRoutineId, 
         }),
       );
 
@@ -94,7 +95,6 @@ class _BookConsultationsState extends State<BookConsultations> {
         if (data['success'] == true) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Request sent!')));
           
-          // ADD 'true' HERE to signal success back to the previous page
           Navigator.pop(context, true); 
           
         } else {
@@ -151,7 +151,6 @@ class _BookConsultationsState extends State<BookConsultations> {
                   _buildLabel('Faculty/Student Tutor:'),
                   _buildDropdown(
                     value: selectedProvider,
-                    // Showing only the provider initials per your request
                     items: providers.map((p) => DropdownMenuItem(
                       value: p['provider_id'].toString(),
                       child: Text(p['provider_id'].toString()),
@@ -164,42 +163,48 @@ class _BookConsultationsState extends State<BookConsultations> {
                   ),
                   const SizedBox(height: 16),
 
-                  _buildLabel('Day:'),
+                  _buildLabel('Date:'), // Changed text
                   _buildDropdown(
-                    value: selectedDay,
-                    items: availableRoutines.map((r) => r['day_of_week'].toString()).toSet().map((day) => DropdownMenuItem(
-                      value: day,
-                      child: Text(day),
-                    )).toList(),
+                    value: selectedDate,
+                    // Now parsing con_date and formatting it nicely for the user
+                    items: availableRoutines.map((r) => r['con_date'].toString()).toSet().map((dateStr) {
+                      DateTime parsedDate = DateTime.parse(dateStr);
+                      String displayDate = DateFormat('MMMM d, yyyy').format(parsedDate);
+                      return DropdownMenuItem(
+                        value: dateStr,
+                        child: Text(displayDate),
+                      );
+                    }).toList(),
                     onChanged: (val) {
                       setState(() {
-                        selectedDay = val as String;
+                        selectedDate = val as String;
                         selectedTime = null; 
                         selectedRoutineId = null;
                       });
                     },
-                    hint: selectedProvider == null ? 'Select Provider first' : 'Select Day',
+                    hint: selectedProvider == null ? 'Select Provider first' : 'Select Date',
                   ),
                   const SizedBox(height: 16),
 
                   _buildLabel('Time:'),
                   _buildDropdown(
                     value: selectedTime,
-                    items: availableRoutines.where((r) => r['day_of_week'] == selectedDay).map((r) => DropdownMenuItem(
+                    // Filter times based on selected con_date
+                    items: availableRoutines.where((r) => r['con_date'] == selectedDate).map((r) => DropdownMenuItem(
                       value: r['time_slot'].toString(),
                       child: Text(r['time_slot'].toString()),
                     )).toList(),
                     onChanged: (val) {
                       setState(() {
                         selectedTime = val as String;
-                        // Find and store the routine_id for the exact day and time chosen
+                        // Find the routine_id matching the specific date and time
                         final routine = availableRoutines.firstWhere(
-                          (r) => r['day_of_week'] == selectedDay && r['time_slot'] == selectedTime
+                          (r) => r['con_date'] == selectedDate && r['time_slot'] == selectedTime
                         );
                         selectedRoutineId = routine['routine_id'];
                       });
                     },
-                    hint: selectedDay == null ? 'Select Day first' : 'Select Time',
+                    hint: selectedDate == null ? 'Select Date first' : 'Select Time',
                   ),
                   const SizedBox(height: 32),
 
