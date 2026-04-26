@@ -4,11 +4,12 @@ from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, field_validator
 from typing import Dict, List
 from datetime import date, timedelta
-
+from typing import Optional
 import mysql.connector
 import os
 import shutil
 import uvicorn
+import httpx
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app = FastAPI()
@@ -72,9 +73,10 @@ class SaveRoutine(BaseModel):
     provider_id: str
     routine: Dict[str, List[str]]
 
-class UpdateStatus(BaseModel):
+class UpdateStatusRequest(BaseModel):
     booking_id: int
     status: str
+    summary: Optional[str] = None
 
 class RoutineItem(BaseModel):
     day_of_week: str
@@ -135,6 +137,7 @@ class CourseOutline(BaseModel):
     stream: str
     status: str
     credits: int = 3
+    grade_point: float = 0.0
 
 class DeleteCourse(BaseModel):
     user_id: str
@@ -152,6 +155,9 @@ def get_db():
         password="123",
         database="project"
     )
+
+ADZUNA_APP_ID = "cafc7d5a"
+ADZUNA_APP_KEY = "b84e48b51652356699230bb096ae9cbe"
 
 # ===================== USER SYSTEM =====================
 @app.post("/register")
@@ -307,25 +313,36 @@ def get_my_consultations(user_id: str, role: str):
 
 
 @app.post("/update_consultation_status")
-def update_consultation_status(payload: UpdateStatus):
+def update_consultation_status(req: UpdateStatusRequest):
     db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor()
         
-        cursor.execute(
-            "UPDATE consultation_bookings SET status = %s WHERE booking_id = %s",
-            (payload.status, payload.booking_id)
-        )
+        # If it's Completed and has a summary, update both status and summary
+        if req.status == 'Completed' and req.summary is not None:
+            cursor.execute("""
+                UPDATE consultation_bookings 
+                SET status = %s, summary = %s 
+                WHERE booking_id = %s
+            """, (req.status, req.summary, req.booking_id))
+        else:
+            # Otherwise, just update the status (for Accepted/Rejected)
+            cursor.execute("""
+                UPDATE consultation_bookings 
+                SET status = %s 
+                WHERE booking_id = %s
+            """, (req.status, req.booking_id))
+            
         db.commit()
-        return {"success": True, "message": f"Status updated to {payload.status}"}
+        return {"success": True, "message": f"Status updated to {req.status}"}
     except Exception as e:
         if db: db.rollback()
-        # Replaced json_error to ensure it returns cleanly 
         return {"success": False, "error": str(e)}
     finally:
         if cursor: cursor.close()
         if db: db.close()
+
 
 @app.get("/consultation_history/{user_id}")
 def get_consultation_history(user_id: str, role: str):
@@ -619,7 +636,76 @@ def save_note(payload: SaveNote):
     finally:
         if cursor: cursor.close()
         if db: db.close()
-# ===================== FOCUS MODE =====================
+
+@app.post("/api/notes/unsave")
+def unsave_note(payload: SaveNote):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+
+        cursor.execute("""
+            DELETE FROM saved_notes
+            WHERE user_id=%s AND note_id=%s
+        """, (payload.user_id, payload.note_id))
+
+        db.commit()
+        return {"success": True, "message": "Unsaved"}
+
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+
+@app.get("/api/notes/saved/{user_id}")
+def get_saved_notes(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT 
+                n.note_id,
+                n.title,
+                n.description,
+                n.course,
+                n.file_path,
+                n.filename,
+                n.file_size,
+                n.uploaded_by,
+                n.created_at,
+                n.ai_score,
+                n.completeness,
+                n.keyword_coverage,
+                n.clarity,
+                n.formatting,
+                n.feedback,
+
+                (SELECT COUNT(*) FROM note_upvotes u WHERE u.note_id = n.note_id) AS upvotes,
+                (SELECT COUNT(*) FROM note_comments c WHERE c.note_id = n.note_id) AS comments,
+
+                EXISTS(
+                    SELECT 1 FROM note_upvotes u2 
+                    WHERE u2.note_id = n.note_id AND u2.user_id = %s
+                ) AS isLiked
+
+            FROM note n
+            JOIN saved_notes s ON n.note_id = s.note_id
+            WHERE s.user_id = %s
+            ORDER BY s.id DESC
+        """, (user_id, user_id))
+
+        return {
+            "success": True,
+            "notes": cursor.fetchall()
+        }
+
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+#focus mode session
 @app.post("/save_focus_session")
 def save_focus_session(session: FocusSession):
     db = cursor = None
@@ -666,11 +752,12 @@ def get_academic_risk(user_id: str):
         att_rate = stats["attendance_count"] / stats["total_classes"]
         
         # Risk points
-        att_risk = 40 if att_rate < 0.75 else 0
-        cgpa_risk = 30 if float(stats["cgpa"]) < 3.0 else 0
-        deadline_risk = min(stats["missed_deadlines"] * 15, 30) # Max 30 points
+        att_risk = 25 if att_rate < 0.75 else 0
+        cgpa_risk = 25 if float(stats["cgpa"]) < 3.0 else 0
+        deadline_risk = min(stats["missed_deadlines"] * 12.5, 25)
+        quiz_risk = min(stats["low_quizzes"] * 12.5, 25)
         
-        total_score = att_risk + cgpa_risk + deadline_risk
+        total_score = att_risk + cgpa_risk + deadline_risk + quiz_risk
 
         if total_score >= 70:
             zone, suggestion = "High", "Critical risk: Please consult your faculty advisor."
@@ -806,6 +893,7 @@ def delete_task(user_id: str = Query(...), title: str = Query(...)):
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
 
+
 # ===================== COURSE OUTLINE SYSTEM =====================
 @app.post("/api/courses/update")
 def update_course_outline(course: CourseOutline):
@@ -814,83 +902,29 @@ def update_course_outline(course: CourseOutline):
         db = get_db()
         cursor = db.cursor()
         query = """
-            INSERT INTO course_outlines (user_id, course_code, course_name, stream, status, credits)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO course_outlines (user_id, course_code, course_name, stream, status, credits, grade_point)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE 
-            status = VALUES(status), course_name = VALUES(course_name), stream = VALUES(stream)
+                status = VALUES(status), 
+                course_name = VALUES(course_name), 
+                stream = VALUES(stream),
+                credits = VALUES(credits),
+                grade_point = VALUES(grade_point)
         """
-        cursor.execute(query, (course.user_id, course.course_code, course.course_name, course.stream, course.status, course.credits))
+        # Ensure you pass 7 parameters to match the 7 %s placeholders
+        cursor.execute(query, (
+            course.user_id, 
+            course.course_code, 
+            course.course_name, 
+            course.stream, 
+            course.status, 
+            course.credits, 
+            course.grade_point
+        ))
         db.commit()
         return {"success": True, "message": "Course outline updated"}
-    except Exception as e: return json_error(str(e))
-    finally:
-        if cursor: cursor.close()
-        if db: db.close()
-
-@app.post("/api/notes/unsave")
-def unsave_note(payload: SaveNote):
-    db = cursor = None
-    try:
-        db = get_db()
-        cursor = db.cursor()
-
-        cursor.execute("""
-            DELETE FROM saved_notes
-            WHERE user_id=%s AND note_id=%s
-        """, (payload.user_id, payload.note_id))
-
-        db.commit()
-        return {"success": True, "message": "Unsaved"}
-
-    finally:
-        if cursor: cursor.close()
-        if db: db.close()
-
-
-@app.get("/api/notes/saved/{user_id}")
-def get_saved_notes(user_id: str):
-    db = cursor = None
-    try:
-        db = get_db()
-        cursor = db.cursor(dictionary=True)
-
-        cursor.execute("""
-            SELECT 
-                n.note_id,
-                n.title,
-                n.description,
-                n.course,
-                n.file_path,
-                n.filename,
-                n.file_size,
-                n.uploaded_by,
-                n.created_at,
-                n.ai_score,
-                n.completeness,
-                n.keyword_coverage,
-                n.clarity,
-                n.formatting,
-                n.feedback,
-
-                (SELECT COUNT() FROM note_upvotes u WHERE u.note_id = n.note_id) AS upvotes,
-                (SELECT COUNT() FROM note_comments c WHERE c.note_id = n.note_id) AS comments,
-
-                EXISTS(
-                    SELECT 1 FROM note_upvotes u2 
-                    WHERE u2.note_id = n.note_id AND u2.user_id = %s
-                ) AS isLiked
-
-            FROM note n
-            JOIN saved_notes s ON n.note_id = s.note_id
-            WHERE s.user_id = %s
-            ORDER BY s.id DESC
-        """, (user_id, user_id))
-
-        return {
-            "success": True,
-            "notes": cursor.fetchall()
-        }
-
+    except Exception as e: 
+        return {"success": False, "error": str(e)}
     finally:
         if cursor: cursor.close()
         if db: db.close()
@@ -929,6 +963,41 @@ def delete_course_outline(payload: DeleteCourse):
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+
+
+# ===================== Time to Graduate =====================
+@app.get("/api/market-data/{major}")
+async def get_market_data(major: str):
+    # Mapping to broader terms for better API hits
+    query = "Software Engineer" if major == "CSE" else "Computer Science"
+    
+    url = f"https://api.adzuna.com/v1/api/jobs/gb/search/1?app_id={ADZUNA_APP_ID}&app_key={ADZUNA_APP_KEY}&results_per_page=5&what={query}"
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url)
+            if response.status_code == 200:
+                data = response.json()
+                
+                count = data.get("count", 0)
+                # Try getting the mean_salary first
+                mean_salary = data.get("mean_salary")
+
+                # Fallback: If mean_salary is 0 or None, look at the first few results
+                if not mean_salary or mean_salary == 0:
+                    results = data.get("results", [])
+                    if results:
+                        # Take the salary_min of the first result as a representative starting salary
+                        mean_salary = results[0].get("salary_min", 35000) # Default to 35k if all else fails
+                
+                return {
+                    "job_count": count,
+                    "avg_salary": round(mean_salary, 2)
+                }
+        except Exception as e:
+            print(f"Adzuna API Error: {e}")
+            
+    return {"job_count": 0, "avg_salary": 0}
 
         
 # ===================== Upvote System =====================

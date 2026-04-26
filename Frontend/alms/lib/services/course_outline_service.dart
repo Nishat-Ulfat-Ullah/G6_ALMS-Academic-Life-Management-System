@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'dart:io';
 
 class CourseOutlineService {
-  final String baseUrl = "http://10.0.2.2:8000";
+  final String baseUrl = Platform.isAndroid ? "http://10.0.2.2:8000" : "http://localhost:8000";
 
   Future<bool> updateCourse(Map<String, dynamic> courseData) async {
     try {
@@ -31,7 +32,6 @@ class CourseOutlineService {
     return null;
   }
 
-  // --- NEW: Delete Course ---
   Future<bool> deleteCourse(String userId, String courseCode) async {
     try {
       final response = await http.post(
@@ -43,5 +43,21 @@ class CourseOutlineService {
     } catch (e) {
       return false;
     }
+  }
+
+  // --- STEP 3: EXTERNAL API CALL ---
+  Future<Map<String, dynamic>?> getMarketData(String major) async {
+    try {
+      // This matches your @app.get("/api/market-data/{major}") backend route
+      final response = await http.get(
+        Uri.parse("$baseUrl/api/market-data/$major"),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+    } catch (e) {
+      print("Error fetching market data: $e");
+    }
+    return null;
   }
 }

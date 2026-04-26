@@ -28,20 +28,6 @@ class AppDrawer extends StatelessWidget {
             onTap: () => Navigator.pushNamed(context, '/mynotespage'),
           ),
           ListTile(
-            leading: const Icon(Icons.school), // Graduation cap icon
-            title: const Text('COURSE OUTLINE'),
-            onTap: () {
-              if (UserSession.userId != null) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => CourseOutlinePage(),
-                  ),
-                );
-              }
-            },
-          ),
-          ListTile(
             leading: const Icon(Icons.timer),
             title: const Text('MY CONSULTATIONS'),
             onTap: () {
