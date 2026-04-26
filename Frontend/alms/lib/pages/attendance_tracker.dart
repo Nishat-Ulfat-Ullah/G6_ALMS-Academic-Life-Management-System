@@ -96,10 +96,10 @@ class _AttendanceTrackerScreenState extends State<AttendanceTrackerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white, 
-      // 1. Extend body behind AppBar so the background starts at the very top
+      //Extend body behind AppBar 
       extendBodyBehindAppBar: true, 
       appBar: AppBar(
-        // Using slight transparency so the background pattern is visible behind the blue
+        // trancparency control
         backgroundColor: const Color(0xFF8CB9F5).withOpacity(0.9), 
         elevation: 0,
         leading: IconButton(
@@ -112,10 +112,10 @@ class _AttendanceTrackerScreenState extends State<AttendanceTrackerScreen> {
         ),
         centerTitle: true,
       ),
-      // 2. Wrap with SizedBox.expand to ensure the background fills the entire screen
+      //Wrap with SizedBox.expand 
       body: SizedBox.expand(
         child: AppBackground(
-          // 3. Use SafeArea to keep content from getting stuck behind the AppBar
+          //Use SafeArea to keep content from getting stuck behind the AppBar
           child: SafeArea(
             child: isCalculating 
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF8CB9F5)))
