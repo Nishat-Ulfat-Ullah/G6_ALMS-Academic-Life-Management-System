@@ -32,7 +32,6 @@ class CourseOutlineService {
     return null;
   }
 
-  // --- NEW: Delete Course ---
   Future<bool> deleteCourse(String userId, String courseCode) async {
     try {
       final response = await http.post(
@@ -44,5 +43,21 @@ class CourseOutlineService {
     } catch (e) {
       return false;
     }
+  }
+
+  // --- STEP 3: EXTERNAL API CALL ---
+  Future<Map<String, dynamic>?> getMarketData(String major) async {
+    try {
+      // This matches your @app.get("/api/market-data/{major}") backend route
+      final response = await http.get(
+        Uri.parse("$baseUrl/api/market-data/$major"),
+      );
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+    } catch (e) {
+      print("Error fetching market data: $e");
+    }
+    return null;
   }
 }

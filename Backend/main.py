@@ -21,8 +21,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 import re
-
-
+import httpx
 
 
 UPLOAD_DIR = "uploads"
@@ -143,6 +142,7 @@ class AcademicTask(BaseModel):
 class TaskComplete(BaseModel):
     task_id: int
 
+
 class CourseOutline(BaseModel):
     user_id: str
     course_code: str
@@ -150,6 +150,7 @@ class CourseOutline(BaseModel):
     stream: str
     status: str
     credits: int = 3
+    grade_point: float = 0.0
 
 class DeleteCourse(BaseModel):
     user_id: str
@@ -167,7 +168,7 @@ def json_error(message: str, code: int = 400):
 
 def get_db():
     return mysql.connector.connect(
-        host="localhost",
+        host="127.0.0.1",
         user="root",
         password="123",
         database="project"
@@ -207,6 +208,10 @@ def send_notification_email(to_email: str, subject: str, body: str):
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# ===================== Shehraj's helpers =====================
+
+ADZUNA_APP_ID = "cafc7d5a"
+ADZUNA_APP_KEY = "b84e48b51652356699230bb096ae9cbe"
 
 # ===================== USER SYSTEM =====================
 @app.post("/register")
@@ -263,8 +268,7 @@ def check_role(user_id: str):
         cursor = db.cursor(dictionary=True)
 
         cursor.execute(
-            "SELECT f_id AS id, f_name AS name, f_initial AS initial, con_status AS con_status "
-            "FROM faculties WHERE f_id=%s",
+            "SELECT f_id AS id, f_name AS name, f_initial AS initial, con_status AS con_status FROM faculties WHERE f_id=%s",
             (user_id,)
         )
         faculty = cursor.fetchone()
@@ -272,8 +276,7 @@ def check_role(user_id: str):
             return {"success": True, "role": "faculty", "person": faculty}
 
         cursor.execute(
-            "SELECT st_id AS id, st_name AS name, st_initial AS initial, st_con_status AS con_status "
-            "FROM student_tutors WHERE st_id=%s",
+            "SELECT st_id AS id, st_name AS name, st_initial AS initial, st_con_status AS con_status FROM student_tutors WHERE st_id=%s",
             (user_id,)
         )
         tutor = cursor.fetchone()
@@ -281,8 +284,7 @@ def check_role(user_id: str):
             return {"success": True, "role": "tutor", "person": tutor}
 
         cursor.execute(
-            "SELECT user_id AS id, name AS name, email AS email "
-            "FROM users WHERE user_id=%s",
+            "SELECT user_id AS id, name AS name, email AS email FROM users WHERE user_id=%s",
             (user_id,)
         )
         student = cursor.fetchone()
@@ -661,12 +663,9 @@ import random
 def evaluate_note_ai(text: str):
 
     return {
-        "score": random.randint(60, 95),
-        "completeness": random.randint(60, 95),
-        "keyword_coverage": random.randint(60, 95),
-        "clarity": random.randint(60, 95),
-        "formatting": random.randint(60, 95),
-        "feedback": "Good structure but needs more key definitions"
+        "score": random.randint(60, 95), "completeness": random.randint(60, 95),
+        "keyword_coverage": random.randint(60, 95), "clarity": random.randint(60, 95),
+        "formatting": random.randint(60, 95), "feedback": "Good structure but needs more key definitions"
     }
 
 @app.post("/api/notes/upload")
@@ -751,8 +750,8 @@ def get_all_notes(user_id: str):
                 n.feedback,
                 u.name AS uploader_name,
 
-                (SELECT COUNT(*) FROM note_upvotes u WHERE u.note_id = n.note_id) AS upvotes,
-                (SELECT COUNT(*) FROM note_comments c WHERE c.note_id = n.note_id) AS comments,
+                (SELECT COUNT() FROM note_upvotes u WHERE u.note_id = n.note_id) AS upvotes,
+                (SELECT COUNT() FROM note_comments c WHERE c.note_id = n.note_id) AS comments,
 
                 EXISTS(
                     SELECT 1 FROM note_upvotes u2 
@@ -867,8 +866,8 @@ def save_focus_session(session: FocusSession):
     try:
         db = get_db()
         cursor = db.cursor()
-        
-        
+
+
         cursor.execute(
             "INSERT INTO focus_sessions (user_id, duration_seconds) VALUES (%s, %s)",
             (session.user_id, session.duration_seconds)
@@ -1021,7 +1020,6 @@ def delete_exam(exam_id: int):
 
 
 # ===================== SMART STUDY LOAD ANALYZER =====================
-
 @app.post("/api/tasks/add")
 def add_task(task: AcademicTask):
     db = cursor = None
@@ -1135,15 +1133,29 @@ def update_course_outline(course: CourseOutline):
         db = get_db()
         cursor = db.cursor()
         query = """
-            INSERT INTO course_outlines (user_id, course_code, course_name, stream, status, credits)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO course_outlines (user_id, course_code, course_name, stream, status, credits, grade_point)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE 
-            status = VALUES(status), course_name = VALUES(course_name), stream = VALUES(stream)
+                status = VALUES(status), 
+                course_name = VALUES(course_name), 
+                stream = VALUES(stream),
+                credits = VALUES(credits),
+                grade_point = VALUES(grade_point)
         """
-        cursor.execute(query, (course.user_id, course.course_code, course.course_name, course.stream, course.status, course.credits))
+        # Ensure you pass 7 parameters to match the 7 %s placeholders
+        cursor.execute(query, (
+            course.user_id, 
+            course.course_code, 
+            course.course_name, 
+            course.stream, 
+            course.status, 
+            course.credits, 
+            course.grade_point
+        ))
         db.commit()
         return {"success": True, "message": "Course outline updated"}
-    except Exception as e: return json_error(str(e))
+    except Exception as e: 
+        return {"success": False, "error": str(e)}
     finally:
         if cursor: cursor.close()
         if db: db.close()
@@ -1182,6 +1194,41 @@ def delete_course_outline(payload: DeleteCourse):
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+
+
+# ===================== Time to Graduate =====================
+@app.get("/api/market-data/{major}")
+async def get_market_data(major: str):
+    # Mapping to broader terms for better API hits
+    query = "Software Engineer" if major == "CSE" else "Computer Science"
+    
+    url = f"https://api.adzuna.com/v1/api/jobs/gb/search/1?app_id={ADZUNA_APP_ID}&app_key={ADZUNA_APP_KEY}&results_per_page=5&what={query}"
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url)
+            if response.status_code == 200:
+                data = response.json()
+                
+                count = data.get("count", 0)
+                # Try getting the mean_salary first
+                mean_salary = data.get("mean_salary")
+
+                # Fallback: If mean_salary is 0 or None, look at the first few results
+                if not mean_salary or mean_salary == 0:
+                    results = data.get("results", [])
+                    if results:
+                        # Take the salary_min of the first result as a representative starting salary
+                        mean_salary = results[0].get("salary_min", 35000) # Default to 35k if all else fails
+                
+                return {
+                    "job_count": count,
+                    "avg_salary": round(mean_salary, 2)
+                }
+        except Exception as e:
+            print(f"Adzuna API Error: {e}")
+            
+    return {"job_count": 0, "avg_salary": 0}
 
         
 # ===================== Upvote System =====================
