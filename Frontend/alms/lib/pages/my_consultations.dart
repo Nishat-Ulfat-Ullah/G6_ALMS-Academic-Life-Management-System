@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart'; // Added for date formatting
+import 'package:intl/intl.dart'; 
 import 'package:alms/widgets/app_drawer.dart';
+import 'package:alms/services/notification_service.dart';
 
 class MyConsultations extends StatefulWidget {
   final String userId;
@@ -15,7 +16,7 @@ class MyConsultations extends StatefulWidget {
 }
 
 class _MyConsultationsState extends State<MyConsultations> {
-  String userRole = "student"; // Default to student
+  String userRole = "student"; 
   List<dynamic> consultations = [];
   bool isLoading = true;
 
@@ -25,12 +26,10 @@ class _MyConsultationsState extends State<MyConsultations> {
     _fetchData();
   }
 
-  // Determine host for emulator/simulator
   String get _host => Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
 
   Future<void> _fetchData() async {
     try {
-      // 1. Get the user's role first
       final roleResponse = await http.get(Uri.parse('http://$_host:8000/role/${widget.userId}'));
       if (roleResponse.statusCode == 200) {
         final roleData = jsonDecode(roleResponse.body);
@@ -39,7 +38,6 @@ class _MyConsultationsState extends State<MyConsultations> {
         }
       }
 
-      // 2. Fetch the consultations based on role
       final consResponse = await http.get(Uri.parse('http://$_host:8000/my_consultations/${widget.userId}?role=$userRole'));
       if (consResponse.statusCode == 200) {
         final consData = jsonDecode(consResponse.body);
@@ -48,6 +46,10 @@ class _MyConsultationsState extends State<MyConsultations> {
             consultations = consData['data'];
             isLoading = false;
           });
+          
+          // ADDED: Schedule the reminders right after fetching the data!
+          scheduleAllReminders(consultations);
+          
           return;
         }
       }
@@ -55,7 +57,6 @@ class _MyConsultationsState extends State<MyConsultations> {
       print("Error fetching data: $e");
     }
     
-    // If it fails, stop loading
     setState(() => isLoading = false);
   }
 
@@ -67,7 +68,6 @@ class _MyConsultationsState extends State<MyConsultations> {
         body: jsonEncode({
           "booking_id": bookingId,
           "status": newStatus,
-          // FIX 1: Removed the invalid '?' before summaryText
           "summary": summaryText, 
         }),
       );
@@ -89,6 +89,51 @@ class _MyConsultationsState extends State<MyConsultations> {
       }
     } catch (e) {
       print("Error updating status: $e");
+    }
+  }
+
+  DateTime combineDateAndTime(String dateStr, String timeStr) {
+    List<String> dateParts = dateStr.split('-');
+    int year = int.parse(dateParts[0]);
+    int month = int.parse(dateParts[1]);
+    int day = int.parse(dateParts[2]);
+
+    List<String> timeParts = timeStr.split(' '); 
+    List<String> hm = timeParts[0].split(':');   
+    
+    int hour = int.parse(hm[0]);
+    int minute = int.parse(hm[1]);
+    String ampm = timeParts[1].toUpperCase();
+
+    if (ampm == 'PM' && hour != 12) {
+      hour += 12;
+    } else if (ampm == 'AM' && hour == 12) {
+      hour = 0;
+    }
+
+    return DateTime(year, month, day, hour, minute);
+  }
+
+  void scheduleAllReminders(List<dynamic> bookingsData) {
+    for (var booking in bookingsData) {
+      if (booking['status'] == 'Accepted' || booking['status'] == 'Pending') {
+        if (booking['con_date'] != null && booking['time_slot'] != null) {
+          try {
+            String dateStr = booking['con_date'].toString(); 
+            String timeStr = booking['time_slot'].toString(); 
+            
+            DateTime exactTime = combineDateAndTime(dateStr, timeStr);
+            
+            NotificationService().scheduleConsultationReminder(
+              id: int.parse(booking['booking_id'].toString()), 
+              courseName: booking['course_name'] ?? 'your course',
+              consultationTime: exactTime,
+            );
+          } catch (e) {
+            print("Error scheduling notification for booking ${booking['booking_id']}: $e");
+          }
+        }
+      }
     }
   }
 
@@ -267,14 +312,13 @@ class ConsultationCard extends StatelessWidget {
     String personLabel = userRole == 'student' ? 'Faculty' : 'Student';
     String personName = userRole == 'student' ? data['provider_id'] : data['student_id'];
 
-    // FIX 2: Parse and format the new con_date instead of day_of_week
     String displayDate = 'Unknown Date';
     if (data['con_date'] != null) {
       try {
         DateTime parsedDate = DateTime.parse(data['con_date'].toString());
         displayDate = DateFormat('MMMM d, yyyy').format(parsedDate);
       } catch (e) {
-        displayDate = data['con_date'].toString(); // Fallback if parsing fails
+        displayDate = data['con_date'].toString(); 
       }
     }
 
@@ -301,7 +345,6 @@ class ConsultationCard extends StatelessWidget {
           const SizedBox(height: 12),
           _buildInfoRow('Time', data['time_slot']),
           const SizedBox(height: 12),
-          // FIX 2: Label changed to Date, passing displayDate
           _buildInfoRow('Date', displayDate), 
           const SizedBox(height: 12),
           _buildInfoRow('Status', currentStatus, valueColor: statusColor),
