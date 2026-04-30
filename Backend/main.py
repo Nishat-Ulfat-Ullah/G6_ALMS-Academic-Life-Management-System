@@ -750,8 +750,8 @@ def get_all_notes(user_id: str):
                 n.feedback,
                 u.name AS uploader_name,
 
-                (SELECT COUNT() FROM note_upvotes u WHERE u.note_id = n.note_id) AS upvotes,
-                (SELECT COUNT() FROM note_comments c WHERE c.note_id = n.note_id) AS comments,
+                (SELECT COUNT(*) FROM note_upvotes u WHERE u.note_id = n.note_id) AS upvotes,
+                (SELECT COUNT(*) FROM note_comments c WHERE c.note_id = n.note_id) AS comments,
 
                 EXISTS(
                     SELECT 1 FROM note_upvotes u2 
