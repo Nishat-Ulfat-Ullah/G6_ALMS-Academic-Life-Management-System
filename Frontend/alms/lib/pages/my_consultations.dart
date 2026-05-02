@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart'; 
 import 'package:alms/widgets/app_drawer.dart';
+import 'package:alms/services/notification_service.dart';
 
 class MyConsultations extends StatefulWidget {
   final String userId;
@@ -14,7 +16,7 @@ class MyConsultations extends StatefulWidget {
 }
 
 class _MyConsultationsState extends State<MyConsultations> {
-  String userRole = "student"; // Default to student
+  String userRole = "student"; 
   List<dynamic> consultations = [];
   bool isLoading = true;
 
@@ -24,12 +26,10 @@ class _MyConsultationsState extends State<MyConsultations> {
     _fetchData();
   }
 
-  // Determine host for emulator/simulator
   String get _host => Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
 
   Future<void> _fetchData() async {
     try {
-      // 1. Get the user's role first
       final roleResponse = await http.get(Uri.parse('http://$_host:8000/role/${widget.userId}'));
       if (roleResponse.statusCode == 200) {
         final roleData = jsonDecode(roleResponse.body);
@@ -38,7 +38,6 @@ class _MyConsultationsState extends State<MyConsultations> {
         }
       }
 
-      // 2. Fetch the consultations based on role
       final consResponse = await http.get(Uri.parse('http://$_host:8000/my_consultations/${widget.userId}?role=$userRole'));
       if (consResponse.statusCode == 200) {
         final consData = jsonDecode(consResponse.body);
@@ -47,6 +46,10 @@ class _MyConsultationsState extends State<MyConsultations> {
             consultations = consData['data'];
             isLoading = false;
           });
+          
+          // ADDED: Schedule the reminders right after fetching the data!
+          scheduleAllReminders(consultations);
+          
           return;
         }
       }
@@ -54,7 +57,6 @@ class _MyConsultationsState extends State<MyConsultations> {
       print("Error fetching data: $e");
     }
     
-    // If it fails, stop loading
     setState(() => isLoading = false);
   }
 
@@ -66,8 +68,7 @@ class _MyConsultationsState extends State<MyConsultations> {
         body: jsonEncode({
           "booking_id": bookingId,
           "status": newStatus,
-          // Include the summary if it was provided
-          if (summaryText != null) "summary": summaryText, 
+          "summary": summaryText, 
         }),
       );
 
@@ -91,13 +92,57 @@ class _MyConsultationsState extends State<MyConsultations> {
     }
   }
 
+  DateTime combineDateAndTime(String dateStr, String timeStr) {
+    List<String> dateParts = dateStr.split('-');
+    int year = int.parse(dateParts[0]);
+    int month = int.parse(dateParts[1]);
+    int day = int.parse(dateParts[2]);
+
+    List<String> timeParts = timeStr.split(' '); 
+    List<String> hm = timeParts[0].split(':');   
+    
+    int hour = int.parse(hm[0]);
+    int minute = int.parse(hm[1]);
+    String ampm = timeParts[1].toUpperCase();
+
+    if (ampm == 'PM' && hour != 12) {
+      hour += 12;
+    } else if (ampm == 'AM' && hour == 12) {
+      hour = 0;
+    }
+
+    return DateTime(year, month, day, hour, minute);
+  }
+
+  void scheduleAllReminders(List<dynamic> bookingsData) {
+    for (var booking in bookingsData) {
+      if (booking['status'] == 'Accepted' || booking['status'] == 'Pending') {
+        if (booking['con_date'] != null && booking['time_slot'] != null) {
+          try {
+            String dateStr = booking['con_date'].toString(); 
+            String timeStr = booking['time_slot'].toString(); 
+            
+            DateTime exactTime = combineDateAndTime(dateStr, timeStr);
+            
+            NotificationService().scheduleConsultationReminder(
+              id: int.parse(booking['booking_id'].toString()), 
+              courseName: booking['course_name'] ?? 'your course',
+              consultationTime: exactTime,
+            );
+          } catch (e) {
+            print("Error scheduling notification for booking ${booking['booking_id']}: $e");
+          }
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color.fromARGB(255, 138, 201, 243),
         title: const Text("MY CONSULTATIONS"),
-        // The Drawer adds the 3-line menu button automatically on the left
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
@@ -109,11 +154,9 @@ class _MyConsultationsState extends State<MyConsultations> {
               onSelected: (String value) {
                 if (value == 'profile') {
                   print('View Profile Clicked');
-                  // Add profile navigation here if needed, passing widget.userId
                 } else if (value == 'settings') {
                   Navigator.pushNamed(context, '/settingspage', arguments: widget.userId);
                 } else if (value == 'logout') {
-                  // Logout usually doesn't need the user ID passed forward
                   Navigator.pushNamed(context, '/loginpage');
                   print('Logout Clicked');
                 }
@@ -163,7 +206,6 @@ class _MyConsultationsState extends State<MyConsultations> {
       drawer: const AppDrawer(), 
       body: Stack(
         children: [
-          // Background Image
           Positioned.fill(
             child: Opacity(
               opacity: 0.4,
@@ -175,7 +217,6 @@ class _MyConsultationsState extends State<MyConsultations> {
               padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
               child: Column(
                 children: [
-                  // Dynamic Scrolling List of Consultations
                   Expanded(
                     child: isLoading
                         ? const Center(child: CircularProgressIndicator())
@@ -202,13 +243,11 @@ class _MyConsultationsState extends State<MyConsultations> {
                   
                   const SizedBox(height: 16),
                   
-                  // Role-based Bottom Buttons
                   CustomActionButton(
                     text: (userRole == 'faculty' || userRole == 'tutor')
                         ? 'Set Consultations'
                         : 'Book Consultations',
                     onTap: () async {
-                      // 1. Wait for the result from the Book/Set Consultations page
                       final result = await Navigator.pushNamed(
                         context,
                         (userRole == 'faculty' || userRole == 'tutor')
@@ -217,12 +256,11 @@ class _MyConsultationsState extends State<MyConsultations> {
                         arguments: widget.userId,
                       );
                       
-                      // 2. If the result is true (meaning a new consultation was booked), refresh the data!
                       if (result == true) {
                         setState(() {
-                          isLoading = true; // Show the loading spinner while fetching
+                          isLoading = true; 
                         });
-                        _fetchData(); // Fetch the updated list
+                        _fetchData(); 
                       }
                     },
                   ),
@@ -230,7 +268,6 @@ class _MyConsultationsState extends State<MyConsultations> {
                   CustomActionButton(
                     text: 'View History',
                     onTap: () {
-                      // Pass the widget.userId to the history page
                       Navigator.pushNamed(context, '/history', arguments: widget.userId);
                     },
                   ),
@@ -263,19 +300,27 @@ class ConsultationCard extends StatelessWidget {
     bool isPending = currentStatus == 'Pending';
     bool isAccepted = currentStatus == 'Accepted';
     
-    // Determine the color based on the status
     Color statusColor;
     if (isPending) {
       statusColor = Colors.pinkAccent; 
     } else if (isAccepted) {
       statusColor = const Color(0xFF00BFA5); 
     } else {
-      statusColor = Colors.blue.shade700; // Completed
+      statusColor = Colors.blue.shade700; 
     }
 
-    // Determine who to show based on role
     String personLabel = userRole == 'student' ? 'Faculty' : 'Student';
     String personName = userRole == 'student' ? data['provider_id'] : data['student_id'];
+
+    String displayDate = 'Unknown Date';
+    if (data['con_date'] != null) {
+      try {
+        DateTime parsedDate = DateTime.parse(data['con_date'].toString());
+        displayDate = DateFormat('MMMM d, yyyy').format(parsedDate);
+      } catch (e) {
+        displayDate = data['con_date'].toString(); 
+      }
+    }
 
     return Container(
       padding: const EdgeInsets.all(16.0),
@@ -300,14 +345,12 @@ class ConsultationCard extends StatelessWidget {
           const SizedBox(height: 12),
           _buildInfoRow('Time', data['time_slot']),
           const SizedBox(height: 12),
-          _buildInfoRow('Day', data['day_of_week']),
+          _buildInfoRow('Date', displayDate), 
           const SizedBox(height: 12),
           _buildInfoRow('Status', currentStatus, valueColor: statusColor),
 
-          // Render buttons only for Faculties/Tutors
           if (userRole == 'faculty' || userRole == 'tutor') ...[
             
-            // 1. Show Accept/Reject if Pending
             if (isPending) ...[
               const SizedBox(height: 16),
               Row(
@@ -319,7 +362,6 @@ class ConsultationCard extends StatelessWidget {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       onPressed: () {
-                        // Safely parse the ID
                         int bId = int.parse(data['booking_id'].toString());
                         onUpdateStatus(bId, 'Rejected');
                       },
@@ -334,7 +376,6 @@ class ConsultationCard extends StatelessWidget {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       onPressed: () {
-                        // Safely parse the ID
                         int bId = int.parse(data['booking_id'].toString());
                         onUpdateStatus(bId, 'Accepted');
                       },
@@ -345,7 +386,6 @@ class ConsultationCard extends StatelessWidget {
               )
             ],
 
-            // 2. Show Completed button if Accepted
             if (isAccepted) ...[
               const SizedBox(height: 16),
               SizedBox(
@@ -360,7 +400,6 @@ class ConsultationCard extends StatelessWidget {
                      int bId = int.parse(data['booking_id'].toString());
                      TextEditingController summaryController = TextEditingController();
 
-                     // Show the popup to enter the summary
                      showDialog(
                        context: context,
                        builder: (context) => AlertDialog(
@@ -385,8 +424,7 @@ class ConsultationCard extends StatelessWidget {
                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please enter a summary.")));
                                  return;
                                }
-                               Navigator.pop(context); // Close the dialog
-                               // Send the ID, Status, and the Text to the backend
+                               Navigator.pop(context); 
                                onUpdateStatus(bId, 'Completed', summaryController.text.trim());
                              },
                              child: const Text("Submit & Complete", style: TextStyle(color: Colors.white)),

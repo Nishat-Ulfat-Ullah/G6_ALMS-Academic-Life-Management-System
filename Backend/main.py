@@ -1,14 +1,29 @@
-from fastapi import FastAPI, UploadFile, File, Form, Query
+from fastapi import FastAPI, UploadFile, File, Form, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel, field_validator
 from typing import Dict, List
 from datetime import date, timedelta
 from typing import Optional
+from mappings import CURRICULUM_MAP, ARXIV_CATEGORY_MAP, COURSE_SKILL_MAP
+from openai import OpenAI
+
+import json
+import requests
+import xml.etree.ElementTree as ET
 import mysql.connector
 import os
 import shutil
 import uvicorn
+import math
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from dotenv import load_dotenv
+import re
+import httpx
+
+
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app = FastAPI()
@@ -72,24 +87,21 @@ class SaveRoutine(BaseModel):
     provider_id: str
     routine: Dict[str, List[str]]
 
-class UpdateStatusRequest(BaseModel):
+class UpdateStatus(BaseModel):
     booking_id: int
     status: str
     summary: Optional[str] = None
 
-class RoutineItem(BaseModel):
-    day_of_week: str
-    time_slot: str
-
-class UpdateRoutineRequest(BaseModel):
-    provider_id: str  
-    routines: List[RoutineItem]
+class AddRoutineDate(BaseModel):
+    provider_id: str
+    con_date: str
+    time_slots: List[str]
 
 class BookingRequest(BaseModel):
     student_id: str
     provider_id: str 
     course_name: str
-    day_of_week: str
+    con_date: str 
     time_slot: str
     routine_id: int
 
@@ -130,6 +142,7 @@ class AcademicTask(BaseModel):
 class TaskComplete(BaseModel):
     task_id: int
 
+
 class CourseOutline(BaseModel):
     user_id: str
     course_code: str
@@ -137,10 +150,16 @@ class CourseOutline(BaseModel):
     stream: str
     status: str
     credits: int = 3
+    grade_point: float = 0.0
 
 class DeleteCourse(BaseModel):
     user_id: str
     course_code: str
+#THESIS
+class UserInterest(BaseModel):
+    user_id: str
+    interests: List[str]
+
 
 # ===================== HELPERS =====================
 
@@ -149,12 +168,50 @@ def json_error(message: str, code: int = 400):
 
 def get_db():
     return mysql.connector.connect(
-        host="localhost",
+        host="127.0.0.1",
         user="root",
         password="123",
         database="project"
     )
 
+load_dotenv()
+
+# ===================== Nishat env =====================
+# Sender credentials here
+SENDER_EMAIL = os.getenv("EMAIL_USER")
+APP_PASSWORD = os.getenv("EMAIL_PASS")
+
+def send_notification_email(to_email: str, subject: str, body: str):
+    try:
+        # Set up the email message structure
+        msg = MIMEMultipart()
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        
+        # Attach the body text
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # Connect to Gmail's SMTP server
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls() # Secure the connection
+        server.login(SENDER_EMAIL, APP_PASSWORD)
+        
+        # Send and close
+        server.send_message(msg)
+        server.quit()
+        print(f"Email successfully sent to {to_email}")
+    except Exception as e:
+        print(f"Failed to send email to {to_email}: {e}")
+
+# ===================== Zaheen env =====================
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# ===================== Shehraj's helpers =====================
+
+ADZUNA_APP_ID = "cafc7d5a"
+ADZUNA_APP_KEY = "b84e48b51652356699230bb096ae9cbe"
 
 # ===================== USER SYSTEM =====================
 @app.post("/register")
@@ -211,8 +268,7 @@ def check_role(user_id: str):
         cursor = db.cursor(dictionary=True)
 
         cursor.execute(
-            "SELECT f_id AS id, f_name AS name, f_initial AS initial, con_status AS con_status "
-            "FROM faculties WHERE f_id=%s",
+            "SELECT f_id AS id, f_name AS name, f_initial AS initial, con_status AS con_status FROM faculties WHERE f_id=%s",
             (user_id,)
         )
         faculty = cursor.fetchone()
@@ -220,8 +276,7 @@ def check_role(user_id: str):
             return {"success": True, "role": "faculty", "person": faculty}
 
         cursor.execute(
-            "SELECT st_id AS id, st_name AS name, st_initial AS initial, st_con_status AS con_status "
-            "FROM student_tutors WHERE st_id=%s",
+            "SELECT st_id AS id, st_name AS name, st_initial AS initial, st_con_status AS con_status FROM student_tutors WHERE st_id=%s",
             (user_id,)
         )
         tutor = cursor.fetchone()
@@ -229,8 +284,7 @@ def check_role(user_id: str):
             return {"success": True, "role": "tutor", "person": tutor}
 
         cursor.execute(
-            "SELECT user_id AS id, name AS name, email AS email "
-            "FROM users WHERE user_id=%s",
+            "SELECT user_id AS id, name AS name, email AS email FROM users WHERE user_id=%s",
             (user_id,)
         )
         student = cursor.fetchone()
@@ -246,37 +300,69 @@ def check_role(user_id: str):
 
 # ===================== Consultations SYSTEM =====================
 
-@app.post("/save_routine")
-def save_routine(payload: SaveRoutine):
+# 1. Fetch upcoming routines for a specific faculty (to display in their settings)
+@app.get("/api/routines/provider/{provider_id}")
+def get_provider_my_routines(provider_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        # CURDATE() ensures past dates are automatically hidden!
+        cursor.execute("""
+            SELECT routine_id, con_date, time_slot, is_booked 
+            FROM consultation_routines 
+            WHERE provider_id = %s AND con_date >= CURDATE()
+            ORDER BY con_date ASC, time_slot ASC
+        """, (provider_id,))
+        
+        # Convert date to string for JSON serialization
+        routines = cursor.fetchall()
+        for r in routines:
+            r['con_date'] = str(r['con_date']) 
+            
+        return {"success": True, "data": routines}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+# 2. Add new time slots for a specific date
+@app.post("/api/routines/add")
+def add_routine_date(payload: AddRoutineDate):
     db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor()
         
-        cursor.execute(
-            "DELETE FROM consultation_routines WHERE provider_id = %s AND is_booked = FALSE",
-            (payload.provider_id,)
-        )
-
         insert_query = """
-            INSERT IGNORE INTO consultation_routines (provider_id, day_of_week, time_slot, is_booked)
+            INSERT IGNORE INTO consultation_routines (provider_id, con_date, time_slot, is_booked)
             VALUES (%s, %s, %s, FALSE)
         """
+        insert_data = [(payload.provider_id, payload.con_date, t) for t in payload.time_slots]
         
-        insert_data = []
-        for day, times in payload.routine.items():
-            for time_slot in times:
-                insert_data.append((payload.provider_id, day, time_slot))
-
         if insert_data:
             cursor.executemany(insert_query, insert_data)
-
         db.commit()
-        return {"success": True, "message": "Routine saved successfully"}
-
+        return {"success": True, "message": "Slots added successfully"}
     except Exception as e:
-        if db: 
-            db.rollback() 
+        if db: db.rollback()
+        return json_error(str(e))
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+# 3. Delete a specific time slot
+@app.delete("/api/routines/delete/{routine_id}")
+def delete_routine_slot(routine_id: int):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        cursor.execute("DELETE FROM consultation_routines WHERE routine_id = %s AND is_booked = FALSE", (routine_id,))
+        db.commit()
+        return {"success": True}
+    except Exception as e:
         return json_error(str(e))
     finally:
         if cursor: cursor.close()
@@ -329,12 +415,13 @@ def get_my_consultations(user_id: str, role: str):
 
 
 @app.post("/update_consultation_status")
-def update_consultation_status(req: UpdateStatusRequest):
+def update_consultation_status(req: UpdateStatus):
     db = cursor = None
     try:
         db = get_db()
         cursor = db.cursor()
         
+        # --- 1. UPDATE THE STATUS ---
         # If it's Completed and has a summary, update both status and summary
         if req.status == 'Completed' and req.summary is not None:
             cursor.execute("""
@@ -351,7 +438,53 @@ def update_consultation_status(req: UpdateStatusRequest):
             """, (req.status, req.booking_id))
             
         db.commit()
+
+        # --- 2. FETCH BOOKING DETAILS FOR EMAILS ---
+        # Only send emails for Accepted or Rejected statuses
+        if req.status in ['Accepted', 'Rejected']:
+            cursor.execute("""
+                SELECT student_id, provider_id, course_name, time_slot, con_date 
+                FROM consultation_bookings WHERE booking_id = %s
+            """, (req.booking_id,))
+            booking = cursor.fetchone()
+
+            if booking:
+                # Standard tuple indexing based on the SELECT order above
+                student_id = booking[0]
+                provider_id = booking[1]
+                course_name = booking[2]
+                time_slot = booking[3]
+                con_date = booking[4]
+
+                # --- 3. FETCH EMAILS ---
+                # Changed to 'user_id' to perfectly match your database table!
+                cursor.execute("SELECT email FROM users WHERE user_id = %s", (student_id,))
+                student = cursor.fetchone()
+                
+                cursor.execute("""
+                    SELECT users.email 
+                    FROM users 
+                    JOIN faculties ON users.user_id = faculties.f_id 
+                    WHERE faculties.f_initial = %s
+                """, (provider_id,))
+                faculty = cursor.fetchone()
+
+                # --- 4. SEND EMAILS ---
+                subject = f"Consultation {req.status}: {course_name}"
+                
+                if student and student[0]:
+                    student_email = student[0]
+                    student_body = f"Hello,\n\nYour consultation request for {course_name} on {con_date} at {time_slot} has been {req.status} by the faculty.\n\nThank you."
+                    # Make sure the send_notification_email function is defined above this in your file!
+                    send_notification_email(student_email, subject, student_body)
+                    
+                if faculty and faculty[0]:
+                    faculty_email = faculty[0]
+                    faculty_body = f"Hello,\n\nYou have successfully {req.status} the consultation request for {course_name} on {con_date} at {time_slot}.\n\nThank you."
+                    send_notification_email(faculty_email, subject, faculty_body)
+
         return {"success": True, "message": f"Status updated to {req.status}"}
+    
     except Exception as e:
         if db: db.rollback()
         return {"success": False, "error": str(e)}
@@ -447,39 +580,13 @@ def get_provider_routine(provider_initial: str):
         # JOIN tables to link f_initial (RHD) to f_id (T24001)
         # Only return slots where is_booked = 0
         cursor.execute("""
-            SELECT cr.routine_id, cr.day_of_week, cr.time_slot 
+            SELECT cr.routine_id, cr.con_date, cr.time_slot 
             FROM consultation_routines cr
             JOIN faculties f ON cr.provider_id = f.f_id
             WHERE f.f_initial = %s AND cr.is_booked = 0
         """, (provider_initial,))
         return {"success": True, "data": cursor.fetchall()}
     except Exception as e:
-        return {"success": False, "error": str(e)}
-    finally:
-        if cursor: cursor.close()
-        if db: db.close()
-
-
-@app.post("/update_routine")
-def update_routine(req: UpdateRoutineRequest):
-    db = cursor = None
-    try:
-        db = get_db()
-        cursor = db.cursor()
-
-        cursor.execute("DELETE FROM consultation_routines WHERE provider_id = %s", (req.provider_id,))
-        
-        for slot in req.routines:
-            cursor.execute("""
-                INSERT INTO consultation_routines (provider_id, day_of_week, time_slot, is_booked)
-                VALUES (%s, %s, %s, 0)
-            """, (req.provider_id, slot.day_of_week, slot.time_slot))      
-
-        db.commit()
-        return {"success": True, "message": "Routine updated and all slots reset!"}
-        
-    except Exception as e:
-        if db: db.rollback() 
         return {"success": False, "error": str(e)}
     finally:
         if cursor: cursor.close()
@@ -496,9 +603,9 @@ def book_consultation(req: BookingRequest):
         #Insert the booking into consultation_bookings
         cursor.execute("""
             INSERT INTO consultation_bookings 
-            (student_id, provider_id, course_name, day_of_week, time_slot, status) 
+            (student_id, provider_id, course_name, con_date, time_slot, status) 
             VALUES (%s, %s, %s, %s, %s, 'Pending')
-        """, (req.student_id, req.provider_id, req.course_name, req.day_of_week, req.time_slot))
+        """, (req.student_id, req.provider_id, req.course_name, req.con_date, req.time_slot))
         
         #Update the consultation_routines to mark this specific slot as booked
         cursor.execute("""
@@ -508,13 +615,44 @@ def book_consultation(req: BookingRequest):
         """, (req.routine_id,))
         
         db.commit()
+
+        # 1. Fetch Student Email
+        cursor.execute("SELECT email FROM users WHERE user_id = %s", (req.student_id,))
+        student_row = cursor.fetchone()
+        
+        # 2. Fetch Faculty Email
+        cursor.execute("""
+            SELECT users.email 
+            FROM users 
+            JOIN faculties ON users.user_id = faculties.f_id 
+            WHERE faculties.f_initial = %s
+        """, (req.provider_id,))
+        faculty_row = cursor.fetchone() 
+
+        #Send Email Student
+        if student_row and student_row[0]:
+            send_notification_email(
+                to_email=student_row[0],
+                subject="Consultation Request Sent",
+                body=f"You have successfully requested a consultation for {req.course_name}."
+            )
+        #Send Email Faculty
+        if faculty_row and faculty_row[0]:
+            send_notification_email(
+                to_email=faculty_row[0],
+                subject="New Consultation Request",
+                body=f"You have a new consultation request for {req.course_name}. Please log in to the app to Accept or Reject it."
+            )
+
         return {"success": True, "message": "Consultation booked successfully"}
+        
     except Exception as e:
         if db: db.rollback() 
         return {"success": False, "error": str(e)}
     finally:
         if cursor: cursor.close()
         if db: db.close()
+
 
 # ===================== NOTE SYSTEM =====================
 
@@ -525,12 +663,9 @@ import random
 def evaluate_note_ai(text: str):
 
     return {
-        "score": random.randint(60, 95),
-        "completeness": random.randint(60, 95),
-        "keyword_coverage": random.randint(60, 95),
-        "clarity": random.randint(60, 95),
-        "formatting": random.randint(60, 95),
-        "feedback": "Good structure but needs more key definitions"
+        "score": random.randint(60, 95), "completeness": random.randint(60, 95),
+        "keyword_coverage": random.randint(60, 95), "clarity": random.randint(60, 95),
+        "formatting": random.randint(60, 95), "feedback": "Good structure but needs more key definitions"
     }
 
 @app.post("/api/notes/upload")
@@ -731,8 +866,8 @@ def save_focus_session(session: FocusSession):
     try:
         db = get_db()
         cursor = db.cursor()
-        
-        
+
+
         cursor.execute(
             "INSERT INTO focus_sessions (user_id, duration_seconds) VALUES (%s, %s)",
             (session.user_id, session.duration_seconds)
@@ -885,7 +1020,6 @@ def delete_exam(exam_id: int):
 
 
 # ===================== SMART STUDY LOAD ANALYZER =====================
-
 @app.post("/api/tasks/add")
 def add_task(task: AcademicTask):
     db = cursor = None
@@ -999,15 +1133,29 @@ def update_course_outline(course: CourseOutline):
         db = get_db()
         cursor = db.cursor()
         query = """
-            INSERT INTO course_outlines (user_id, course_code, course_name, stream, status, credits)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO course_outlines (user_id, course_code, course_name, stream, status, credits, grade_point)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE 
-            status = VALUES(status), course_name = VALUES(course_name), stream = VALUES(stream)
+                status = VALUES(status), 
+                course_name = VALUES(course_name), 
+                stream = VALUES(stream),
+                credits = VALUES(credits),
+                grade_point = VALUES(grade_point)
         """
-        cursor.execute(query, (course.user_id, course.course_code, course.course_name, course.stream, course.status, course.credits))
+        # Ensure you pass 7 parameters to match the 7 %s placeholders
+        cursor.execute(query, (
+            course.user_id, 
+            course.course_code, 
+            course.course_name, 
+            course.stream, 
+            course.status, 
+            course.credits, 
+            course.grade_point
+        ))
         db.commit()
         return {"success": True, "message": "Course outline updated"}
-    except Exception as e: return json_error(str(e))
+    except Exception as e: 
+        return {"success": False, "error": str(e)}
     finally:
         if cursor: cursor.close()
         if db: db.close()
@@ -1046,6 +1194,41 @@ def delete_course_outline(payload: DeleteCourse):
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+
+
+# ===================== Time to Graduate =====================
+@app.get("/api/market-data/{major}")
+async def get_market_data(major: str):
+    # Mapping to broader terms for better API hits
+    query = "Software Engineer" if major == "CSE" else "Computer Science"
+    
+    url = f"https://api.adzuna.com/v1/api/jobs/gb/search/1?app_id={ADZUNA_APP_ID}&app_key={ADZUNA_APP_KEY}&results_per_page=5&what={query}"
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url)
+            if response.status_code == 200:
+                data = response.json()
+                
+                count = data.get("count", 0)
+                # Try getting the mean_salary first
+                mean_salary = data.get("mean_salary")
+
+                # Fallback: If mean_salary is 0 or None, look at the first few results
+                if not mean_salary or mean_salary == 0:
+                    results = data.get("results", [])
+                    if results:
+                        # Take the salary_min of the first result as a representative starting salary
+                        mean_salary = results[0].get("salary_min", 35000) # Default to 35k if all else fails
+                
+                return {
+                    "job_count": count,
+                    "avg_salary": round(mean_salary, 2)
+                }
+        except Exception as e:
+            print(f"Adzuna API Error: {e}")
+            
+    return {"job_count": 0, "avg_salary": 0}
 
         
 # ===================== Upvote System =====================
@@ -1129,3 +1312,232 @@ def get_comments(note_id: int):
     """, (note_id,))
 
     return {"comments": cursor.fetchall()}
+
+
+# ===================== THESIS RECOMMENDER SYSTEM =====================
+
+# --- THE SCRAPER  ---
+def fetch_real_research_from_arxiv(interest_tags):
+    try:
+        if not interest_tags:
+            interest_tags = ["Artificial Intelligence"]
+
+        search_query = "+OR+".join(
+            [f"all:{tag.replace(' ', '+')}" for tag in interest_tags]
+        )
+
+        # Increase max_results from 15 to 30
+        url = f"http://export.arxiv.org/api/query?search_query={search_query}&start=0&max_results=30"
+
+        response = requests.get(url, timeout=10)
+        if response.status_code != 200:
+            return []
+
+        root = ET.fromstring(response.content)
+        results = []
+        ns = {
+            'atom': 'http://www.w3.org/2005/Atom',
+            'arxiv': 'http://arxiv.org/schemas/atom'
+        }
+
+        for entry in root.findall('atom:entry', ns):
+            title_node = entry.find('atom:title', ns)
+            id_node = entry.find('atom:id', ns)
+            summary_node = entry.find('atom:summary', ns)  # grab abstract too
+
+            if title_node is None or id_node is None:
+                continue
+
+            title = title_node.text.strip()
+            link = id_node.text.strip()
+            summary = summary_node.text.strip()[:200] if summary_node is not None else ""
+
+            category_node = entry.find('arxiv:primary_category', ns)
+            raw = category_node.attrib["term"] if category_node is not None else "cs.AI"
+            domain = ARXIV_CATEGORY_MAP.get(raw, raw)
+
+            results.append({
+                "topic": title,
+                "domain": domain,
+                "url": link,
+                "summary": summary   # now includes abstract snippet
+            })
+
+        return results
+
+    except Exception as e:
+        print("ARXIV ERROR:", e)
+        return []
+# --- ENDPOINTS ---
+
+@app.post("/api/interests/update")
+def update_interests(data: UserInterest):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        # Clean out old interests and insert new ones
+        cursor.execute("DELETE FROM user_interests WHERE user_id = %s", (data.user_id,))
+        for tag in data.interests:
+            cursor.execute("INSERT INTO user_interests (user_id, interest_tag) VALUES (%s, %s)", (data.user_id, tag))
+        db.commit()
+        return {"success": True}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()
+
+@app.get("/api/interests/{user_id}")
+def get_user_interests(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("SELECT interest_tag FROM user_interests WHERE user_id=%s", (user_id,))
+        # Extract just the strings into a list
+        interests = [row['interest_tag'] for row in cursor.fetchall()]
+        return {"success": True, "interests": interests}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close(); db.close()
+
+def extract_skills(courses_raw):
+    skills = []
+
+    for c in courses_raw:
+        code = str(c["course_code"])
+
+        if code in COURSE_SKILL_MAP:
+            skills.extend(COURSE_SKILL_MAP[code])
+
+        # fallback mapping from curriculum
+        if code in CURRICULUM_MAP:
+            skills.append(CURRICULUM_MAP[code])
+
+    return list(set(skills))
+
+
+
+
+client = OpenAI(
+    api_key=OPENAI_API_KEY,
+    base_url="https://models.inference.ai.azure.com"  
+)
+
+
+
+def format_papers_for_prompt(papers: list) -> str:
+    if not papers:
+        return "No recent papers found."
+    lines = []
+    # Increased from 8 to 20
+    for i, p in enumerate(papers[:20], 1):
+        lines.append(f"{i}. [{p['domain']}] {p['topic']} — {p['url']}")
+        if p.get("summary"):
+            lines.append(f"   Abstract: {p['summary']}")
+    return "\n".join(lines)
+
+
+def generate_thesis_ideas(interests: list, skills: list, papers: list) -> list:
+    papers_text = format_papers_for_prompt(papers)
+
+    prompt = f"""You are an expert academic research advisor helping an undergraduate student find a thesis topic.
+
+Student profile:
+- Research interests: {", ".join(interests) if interests else "General AI/CS"}
+- Skills from completed courses: {", ".join(skills) if skills else "Programming fundamentals"}
+
+Recent trending research for inspiration (do NOT copy these — use them only as context):
+{papers_text}
+
+Generate exactly 5 unique, original thesis ideas tailored to this student's profile.
+
+Rules:
+- Ideas must be feasible for a 1-year undergraduate thesis
+- Each idea must combine the student's interests AND skills
+- Titles must be specific, not generic
+- Methodology must be concrete and actionable
+- related_research MUST contain exactly 3 papers from the list above
+- related_papers MUST contain the matching URLs for those 3 papers in the same order
+
+Return ONLY a valid JSON array, no markdown, no extra text:
+[
+  {{
+    "title": "...",
+    "description": "...",
+    "methodology": "...",
+    "tools": ["...", "..."],
+    "difficulty": "Low|Medium|High",
+    "related_research": ["paper title 1", "paper title 2", "paper title 3"],
+    "paper_urls": ["url1", "url2", "url3"]
+  }}
+]"""
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are an academic thesis advisor. Always respond with valid JSON only."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.8,
+        max_tokens=3000  # increased from 2000 to fit more content
+    )
+
+    raw = response.choices[0].message.content.strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+
+    ideas = json.loads(raw)
+
+    # Re-attach real URLs from ArXiv by matching titles
+    paper_url_map = {p["topic"]: p["url"] for p in papers}
+    for idea in ideas:
+        idea["paper_urls"] = [
+            paper_url_map.get(title, "")
+            for title in idea.get("related_research", [])
+        ]
+
+    return ideas
+
+@app.get("/api/generate_thesis/{user_id}")
+def generate_thesis(user_id: str):
+    db = cursor = None
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+
+        # 1. Fetch interests
+        cursor.execute(
+            "SELECT interest_tag FROM user_interests WHERE user_id = %s",
+            (user_id,)
+        )
+        interests = [row["interest_tag"] for row in cursor.fetchall()]
+
+        # 2. Fetch completed courses and extract skills
+        cursor.execute(
+            "SELECT course_code FROM course_outlines WHERE user_id = %s AND status = 'Completed'",
+            (user_id,)
+        )
+        courses_raw = cursor.fetchall()
+        skills = extract_skills(courses_raw)
+
+        # 3. Fetch trending ArXiv papers based on interests
+        papers = fetch_real_research_from_arxiv(interests or ["Artificial Intelligence"])
+        
+        if not isinstance(papers, list):
+            papers = []
+
+        # 4. Generate ideas via AI (the actual call, finally!)
+        ideas = generate_thesis_ideas(interests, skills, papers)
+
+        return {"success": True, "ideas": ideas}
+
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"AI returned invalid JSON: {str(e)}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    finally:
+        if cursor: cursor.close()
+        if db: db.close()

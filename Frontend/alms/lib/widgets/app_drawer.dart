@@ -3,6 +3,7 @@ import 'package:alms/pages/my_consultations.dart';
 import 'package:alms/pages/study_dashboard_screen.dart';
 import 'package:alms/pages/course_outline_page.dart';
 import 'package:alms/widgets/user_session.dart';
+import 'package:alms/pages/thesis_recommender.dart';
 import 'package:alms/pages/exam_countdown.dart'; 
 
 class AppDrawer extends StatelessWidget {
@@ -80,8 +81,18 @@ class AppDrawer extends StatelessWidget {
               }
             },
           ),
-          
-
+          ListTile(
+            leading: const Icon(Icons.psychology_alt),
+            title: const Text('Thesis Recommender'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ThesisRecommenderPage(),
+                ),
+              );
+            },
+          ),
           ListTile(
             leading: const Icon(Icons.center_focus_strong),
             title: const Text('FOCUS MODE'),

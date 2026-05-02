@@ -2,3 +2,22 @@ Backend/cse471_project/
 # Python cache files
 Backend/__pycache__/
 *.pyc
+
+# Hide environment variables
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+env/
+
+# OS
+.DS_Store
+
+# Uploads (optional, if generated locally)
+uploads/

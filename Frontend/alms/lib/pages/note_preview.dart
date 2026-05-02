@@ -128,7 +128,7 @@ class _NotePreviewPageState extends State<NotePreviewPage> {
                   ? Image.network(
                       imageUrl,
                       fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) =>
+                      errorBuilder: (_, _, _) =>
                           const Icon(Icons.broken_image, size: 60),
                     )
                   : const Center(

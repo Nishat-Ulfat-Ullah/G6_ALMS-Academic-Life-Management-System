@@ -14,9 +14,13 @@ import 'package:alms/pages/consultation_history.dart';
 import 'package:alms/pages/academic_risk_prediction.dart';
 import 'package:alms/pages/attendance_tracker.dart';
 import 'package:alms/widgets/user_session.dart';
+import 'package:alms/services/notification_service.dart'; 
 
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService().init(); 
+  
   runApp(const ALMS());
 }
 
