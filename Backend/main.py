@@ -166,12 +166,21 @@ class UserInterest(BaseModel):
 def json_error(message: str, code: int = 400):
     return JSONResponse(content={"success": False, "error": message}, status_code=code)
 
+# def get_db():
+#     return mysql.connector.connect(
+#         host="127.0.0.1",
+#         user="root",
+#         password="123",
+#         database="project"
+#     )
+
 def get_db():
     return mysql.connector.connect(
-        host="127.0.0.1",
-        user="root",
-        password="123",
-        database="project"
+        host=os.getenv("DB_HOST"),
+        port=os.getenv("DB_PORT"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME")
     )
 
 load_dotenv()
