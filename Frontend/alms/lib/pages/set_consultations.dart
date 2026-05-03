@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'dart:io';
+// import 'dart:io';
 import 'package:intl/intl.dart';
 
 class SetConsultations extends StatefulWidget {
@@ -23,7 +23,8 @@ class _SetConsultationsState extends State<SetConsultations> {
     '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM', '05:00 PM'
   ];
 
-  String get host => Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+  // String get host => Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+  String get host => "g6-alms-academic-life-management-system.onrender.com";
 
   @override
   void initState() {

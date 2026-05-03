@@ -21,7 +21,8 @@ class _BrowseNotesState extends State<BrowseNotes> {
   final Set<int> _saved = {};
   bool _loading = true;
 
-  final String _host = Platform.isAndroid ? '10.0.2.2' : '127.0.0.1';
+  // final String _host = Platform.isAndroid ? '10.0.2.2' : '127.0.0.1';
+  final String _host = 'g6-alms-academic-life-management-system.onrender.com';
 
   @override
   void initState() {

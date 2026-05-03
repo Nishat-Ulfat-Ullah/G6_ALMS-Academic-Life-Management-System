@@ -12,7 +12,8 @@ class BookConsultations extends StatefulWidget {
 }
 
 class _BookConsultationsState extends State<BookConsultations> {
-  String get _host => Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+  // String get _host => Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+  String get _host => "g6-alms-academic-life-management-system.onrender.com"; 
   
   List<dynamic> courses = [];
   List<dynamic> providers = [];

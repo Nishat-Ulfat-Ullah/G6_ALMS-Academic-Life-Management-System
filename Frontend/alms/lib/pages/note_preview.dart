@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:alms/widgets/user_session.dart';
-import 'dart:io';
+// import 'dart:io';
 
 class NotePreviewPage extends StatefulWidget {
   final Map<String, dynamic> note;
@@ -14,8 +14,8 @@ class NotePreviewPage extends StatefulWidget {
 }
 
 class _NotePreviewPageState extends State<NotePreviewPage> {
-  final String _host = Platform.isAndroid ? '10.0.2.2' : 'localhost';
-
+  // final String _host = Platform.isAndroid ? '10.0.2.2' : 'localhost';
+  final String _host = 'g6-alms-academic-life-management-system.onrender.com';
   List comments = [];
   late bool isLiked;
   late int upvotes;

@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+// import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
@@ -20,7 +20,8 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
   List<String> _selectedInterests = [];
   List<String> _availableInterests = [];
 
-  final String _host = Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+  // final String _host = Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+  final String _host = "g6-alms-academic-life-management-system.onrender.com";
 
   static const List<String> _defaultInterests = [
     "AI", "Machine Learning", "NLP", "Cybersecurity",

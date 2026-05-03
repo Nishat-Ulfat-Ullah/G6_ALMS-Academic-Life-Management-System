@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:io';
+// import 'dart:io';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -26,7 +26,8 @@ Future<void> registerUser() async {
 
   setState(() => loading = true);
 
-  final host = Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+  // final host = Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+  final host = "g6-alms-academic-life-management-system.onrender.com";
   final url = Uri.parse("http://$host:8000/register");
 
   final body = {

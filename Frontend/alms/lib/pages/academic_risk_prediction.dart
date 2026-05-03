@@ -29,8 +29,8 @@ class _AcademicRiskScreenState extends State<AcademicRiskScreen> {
     });
 
     try {
-      final host = Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
-      // Notice we changed this from GET to POST, pointing to a calculation endpoint
+      // final host = Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+      final host = 'https://g6-alms-academic-life-management-system.onrender.com';
       final url = Uri.parse('http://$host:8000/api/calculate_risk'); 
       
       final response = await http.post(

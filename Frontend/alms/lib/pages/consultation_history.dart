@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+// import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart'; // Added for date formatting
@@ -24,7 +24,8 @@ class _ConsultationHistoryState extends State<ConsultationHistory> {
     _fetchHistory();
   }
 
-  String get _host => Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+  // String get _host => Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+  String get _host => "g6-alms-academic-life-management-system.onrender.com";
 
   Future<void> _fetchHistory() async {
     try {

@@ -1,12 +1,13 @@
 import 'dart:convert';
-import 'dart:io'; // <-- Required to check Platform (Android vs iOS)
+// import 'dart:io'; // <-- Required to check Platform (Android vs iOS)
 import 'package:http/http.dart' as http;
 
 class StudyAnalyzerService {
   
   // Dynamically get the base URL depending on the platform
   static String get baseUrl {
-    final host = Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+    // final host = Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+    final host = "g6-alms-academic-life-management-system.onrender.com";
     return "http://$host:8000";
   }
 
