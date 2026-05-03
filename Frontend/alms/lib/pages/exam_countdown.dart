@@ -36,7 +36,8 @@ class _ExamCountdownPageState extends State<ExamCountdownPage> {
   Future<void> _fetchExams() async {
     setState(() => isLoading = true);
     try {
-      final response = await http.get(Uri.parse('http://$_host:8000/api/exams/${widget.userId}'));
+      // final response = await http.get(Uri.parse('http://$_host:8000/api/exams/${widget.userId}'));
+      final response = await http.get(Uri.parse('https://$_host/api/exams/${widget.userId}'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
@@ -53,7 +54,8 @@ class _ExamCountdownPageState extends State<ExamCountdownPage> {
 
   Future<void> _deleteExam(int id) async {
     try {
-      final response = await http.delete(Uri.parse('http://$_host:8000/api/exams/delete/$id'));
+      // final response = await http.delete(Uri.parse('http://$_host:8000/api/exams/delete/$id'));
+      final response = await http.delete(Uri.parse('https://$_host/api/exams/delete/$id'));
       if (response.statusCode == 200) {
         _fetchExams(); // Refresh list
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Countdown deleted!')));
@@ -189,7 +191,8 @@ class _ExamCountdownPageState extends State<ExamCountdownPage> {
 
                   // 3. Save to our FastAPI backend
                   final response = await http.post(
-                    Uri.parse('http://$_host:8000/api/exams/add'),
+                    // Uri.parse('http://$_host:8000/api/exams/add'),
+                    Uri.parse('https://$_host/api/exams/add'),
                     headers: {"Content-Type": "application/json"},
                     body: jsonEncode({
                       "user_id": widget.userId,

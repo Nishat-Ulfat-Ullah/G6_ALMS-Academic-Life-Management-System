@@ -30,7 +30,8 @@ class _ConsultationHistoryState extends State<ConsultationHistory> {
   Future<void> _fetchHistory() async {
     try {
       // 1. Get role
-      final roleResponse = await http.get(Uri.parse('http://$_host:8000/role/${widget.userId}'));
+      // final roleResponse = await http.get(Uri.parse('http://$_host:8000/role/${widget.userId}'));
+      final roleResponse = await http.get(Uri.parse('https://$_host/role/${widget.userId}'));
       if (roleResponse.statusCode == 200) {
         final roleData = jsonDecode(roleResponse.body);
         if (roleData['success'] == true) {
@@ -39,7 +40,8 @@ class _ConsultationHistoryState extends State<ConsultationHistory> {
       }
 
       // 2. Fetch history (Completed/Rejected)
-      final histResponse = await http.get(Uri.parse('http://$_host:8000/consultation_history/${widget.userId}?role=$userRole'));
+      // final histResponse = await http.get(Uri.parse('http://$_host:8000/consultation_history/${widget.userId}?role=$userRole'));
+      final histResponse = await http.get(Uri.parse('https://$_host/consultation_history/${widget.userId}?role=$userRole'));
       if (histResponse.statusCode == 200) {
         final histJson = jsonDecode(histResponse.body);
         if (histJson['success'] == true) {

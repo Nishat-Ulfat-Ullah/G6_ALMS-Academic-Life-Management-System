@@ -21,8 +21,9 @@ class _LoginpgState extends State<Loginpg> {
     setState(() => loading = true);
 
     // final host = Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+    // final url = Uri.parse("http://$host:8000/login");
     final host = "g6-alms-academic-life-management-system.onrender.com";
-    final url = Uri.parse("http://$host:8000/login");
+    final url = Uri.parse("https://$host/login");
 
     final body = {
       "email": emailController.text.trim(),

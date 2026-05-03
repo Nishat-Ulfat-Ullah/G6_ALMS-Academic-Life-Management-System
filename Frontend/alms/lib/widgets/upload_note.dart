@@ -61,7 +61,8 @@ class _UploadNoteSheetState extends State<UploadNoteSheet> {
 
     final req = http.MultipartRequest(
       'POST',
-      Uri.parse('http://$_host:8000/api/notes/upload'),
+      // Uri.parse('http://$_host:8000/api/notes/upload'),
+      Uri.parse('https://$_host/api/notes/upload'),
     );
 
     req.fields['title'] = _titleCtrl.text.trim();

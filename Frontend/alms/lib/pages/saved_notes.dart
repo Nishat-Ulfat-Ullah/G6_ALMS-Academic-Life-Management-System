@@ -35,8 +35,11 @@ class _SavedNotesPageState extends State<SavedNotesPage> {
     setState(() => _loading = true);
 
     try {
+      // final res = await http.get(
+      //   Uri.parse('http://$_host:8000/api/notes/saved/$uid'),
+      // );
       final res = await http.get(
-        Uri.parse('http://$_host:8000/api/notes/saved/$uid'),
+        Uri.parse('https://$_host/api/notes/saved/$uid'),
       );
 
       final data = jsonDecode(res.body);
@@ -59,7 +62,8 @@ class _SavedNotesPageState extends State<SavedNotesPage> {
 
     try {
       await http.post(
-        Uri.parse('http://$_host:8000/api/notes/unsave'),
+        // Uri.parse('http://$_host:8000/api/notes/unsave'),
+        Uri.parse('https://$_host/api/notes/unsave'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "user_id": uid,

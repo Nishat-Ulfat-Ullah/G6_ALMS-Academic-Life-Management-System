@@ -8,7 +8,8 @@ class StudyAnalyzerService {
   static String get baseUrl {
     // final host = Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
     final host = "g6-alms-academic-life-management-system.onrender.com";
-    return "http://$host:8000";
+    // return "http://$host:8000";
+    return "https://$host";
   }
 
   static Future<bool> addTask({

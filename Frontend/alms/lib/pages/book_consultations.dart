@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+// import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart'; // Added for date formatting
@@ -35,8 +35,10 @@ class _BookConsultationsState extends State<BookConsultations> {
 
   Future<void> _fetchInitialData() async {
     try {
-      final courseRes = await http.get(Uri.parse('http://$_host:8000/api/courses'));
-      final providerRes = await http.get(Uri.parse('http://$_host:8000/api/providers'));
+      // final courseRes = await http.get(Uri.parse('http://$_host:8000/api/courses'));
+      // final providerRes = await http.get(Uri.parse('http://$_host:8000/api/providers'));
+      final courseRes = await http.get(Uri.parse('https://$_host/api/courses'));
+      final providerRes = await http.get(Uri.parse('https://$_host/api/providers'));
 
       if (courseRes.statusCode == 200 && providerRes.statusCode == 200) {
         setState(() {
@@ -60,7 +62,8 @@ class _BookConsultationsState extends State<BookConsultations> {
     });
     
     try {
-      final response = await http.get(Uri.parse('http://$_host:8000/api/routines/$providerId'));
+      // final response = await http.get(Uri.parse('http://$_host:8000/api/routines/$providerId'));
+      final response = await http.get(Uri.parse('https://$_host/api/routines/$providerId'));
       if (response.statusCode == 200) {
         setState(() {
           availableRoutines = jsonDecode(response.body)['data'];
@@ -79,7 +82,8 @@ class _BookConsultationsState extends State<BookConsultations> {
 
     try {
       final response = await http.post(
-        Uri.parse('http://$_host:8000/book_consultation'),
+        // Uri.parse('http://$_host:8000/book_consultation'),
+        Uri.parse('https://$_host/book_consultation'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "student_id": studentId,

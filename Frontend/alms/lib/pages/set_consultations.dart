@@ -35,7 +35,8 @@ class _SetConsultationsState extends State<SetConsultations> {
   Future<void> fetchRoutines() async {
     setState(() => isLoading = true);
     try {
-      final url = Uri.parse('http://$host:8000/api/routines/provider/${widget.currentUserID}');
+      // final url = Uri.parse('http://$host:8000/api/routines/provider/${widget.currentUserID}');
+      final url = Uri.parse('https://$host/api/routines/provider/${widget.currentUserID}');
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -67,7 +68,8 @@ class _SetConsultationsState extends State<SetConsultations> {
 
   Future<void> deleteSlot(int routineId) async {
     try {
-      final url = Uri.parse('http://$host:8000/api/routines/delete/$routineId');
+      // final url = Uri.parse('http://$host:8000/api/routines/delete/$routineId');
+      final url = Uri.parse('https://$host/api/routines/delete/$routineId');
       final response = await http.delete(url);
       if (response.statusCode == 200) {
         fetchRoutines(); // Refresh list
@@ -172,7 +174,8 @@ class _SetConsultationsState extends State<SetConsultations> {
     };
 
     try {
-      final url = Uri.parse('http://$host:8000/api/routines/add');
+      // final url = Uri.parse('http://$host:8000/api/routines/add');
+      final url = Uri.parse('https://$host/api/routines/add');
       final response = await http.post(
         url,
         headers: {"Content-Type": "application/json"},

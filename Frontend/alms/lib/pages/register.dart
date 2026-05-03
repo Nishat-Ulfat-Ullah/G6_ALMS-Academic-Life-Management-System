@@ -27,8 +27,9 @@ Future<void> registerUser() async {
   setState(() => loading = true);
 
   // final host = Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
+  // final url = Uri.parse("http://$host:8000/register");
   final host = "g6-alms-academic-life-management-system.onrender.com";
-  final url = Uri.parse("http://$host:8000/register");
+  final url = Uri.parse("https://$host/register");
 
   final body = {
     "user_id": userIdController.text,

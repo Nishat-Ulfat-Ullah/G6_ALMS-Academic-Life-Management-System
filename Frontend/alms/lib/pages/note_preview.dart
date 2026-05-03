@@ -34,8 +34,11 @@ class _NotePreviewPageState extends State<NotePreviewPage> {
   Future<void> loadComments() async {
     try {
       final res = await http.get(
+        // Uri.parse(
+        //   "http://$_host:8000/api/notes/comments/${widget.note['note_id']}",
+        // ),
         Uri.parse(
-          "http://$_host:8000/api/notes/comments/${widget.note['note_id']}",
+          "https://$_host/api/notes/comments/${widget.note['note_id']}",
         ),
       );
 
@@ -51,7 +54,8 @@ class _NotePreviewPageState extends State<NotePreviewPage> {
   Future<void> toggleUpvote() async {
     try {
       final res = await http.post(
-        Uri.parse("http://$_host:8000/api/notes/upvote"),
+        // Uri.parse("http://$_host:8000/api/notes/upvote"),
+        Uri.parse("https://$_host/api/notes/upvote"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "note_id": widget.note['note_id'],
@@ -79,7 +83,8 @@ class _NotePreviewPageState extends State<NotePreviewPage> {
 
     try {
       await http.post(
-        Uri.parse("http://$_host:8000/api/notes/comment"),
+        // Uri.parse("http://$_host:8000/api/notes/comment"),
+        Uri.parse("https://$_host/api/notes/comment"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "note_id": widget.note['note_id'],
@@ -102,7 +107,8 @@ class _NotePreviewPageState extends State<NotePreviewPage> {
     final String filename = note['filename'] ?? '';
     final String filePath = note['file_path'] ?? '';
 
-    final String imageUrl = "http://$_host:8000/$filePath";
+    // final String imageUrl = "http://$_host:8000/$filePath";
+    final String imageUrl = "https://$_host/$filePath";
 
     final int? aiScore = note['ai_score'];
     final String feedback = note['feedback'] ?? '';

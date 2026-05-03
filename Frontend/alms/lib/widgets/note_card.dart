@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:alms/pages/note_preview.dart';
-import 'dart:io';
+// import 'dart:io';
 
 
 class NoteCard extends StatelessWidget {
@@ -47,7 +47,8 @@ class NoteCard extends StatelessWidget {
     final String ext = _ext(filename);
     final Color color = _extColor(ext);
 
-    final String imageUrl = "${(Platform.isAndroid) ? 'http://10.0.2.2:8000' : 'http://127.0.0.1:8000'}/$filePath";
+    // final String imageUrl = "${(Platform.isAndroid) ? 'http://10.0.2.2:8000' : 'http://127.0.0.1:8000'}/$filePath";
+    final String imageUrl = "https://g6-alms-academic-life-management-system.onrender.com/$filePath";
 
     final int upvotes = note['upvotes'] ?? 0;
     final int comments = note['comments'] ?? 0;

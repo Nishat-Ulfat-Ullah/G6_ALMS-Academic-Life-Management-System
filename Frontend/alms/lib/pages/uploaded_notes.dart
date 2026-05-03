@@ -27,7 +27,8 @@ class _UploadedNotesPageState extends State<UploadedNotesPage> {
 
     try {
       final res = await http.get(
-      Uri.parse('http://$_host:8000/api/notes/all/${UserSession.userId}'),
+      // Uri.parse('http://$_host:8000/api/notes/all/${UserSession.userId}'),
+      Uri.parse('https://$_host/api/notes/all/${UserSession.userId}'),
       );
 
       final data = jsonDecode(res.body);

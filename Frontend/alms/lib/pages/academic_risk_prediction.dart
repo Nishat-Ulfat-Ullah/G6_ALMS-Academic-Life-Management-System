@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:io';
+// import 'dart:io';
 
 class AcademicRiskScreen extends StatefulWidget {
   final String userId;
@@ -30,8 +30,10 @@ class _AcademicRiskScreenState extends State<AcademicRiskScreen> {
 
     try {
       // final host = Platform.isAndroid ? "10.0.2.2" : "127.0.0.1";
-      final host = 'https://g6-alms-academic-life-management-system.onrender.com';
-      final url = Uri.parse('http://$host:8000/api/calculate_risk'); 
+      // final url = Uri.parse('http://$host:8000/api/calculate_risk');
+      
+      final host = 'https://g6-alms-academic-life-management-system.onrender.com'; 
+      final url = Uri.parse('$host/api/calculate_risk');
       
       final response = await http.post(
         url,

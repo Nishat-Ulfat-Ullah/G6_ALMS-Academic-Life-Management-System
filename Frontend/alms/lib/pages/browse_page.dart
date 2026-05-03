@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:io';
+// import 'dart:io';
 import 'dart:convert';
 import 'package:alms/widgets/app_drawer.dart';
 import 'package:alms/widgets/user_session.dart';
@@ -37,7 +37,8 @@ class _BrowseNotesState extends State<BrowseNotes> {
   Future<void> _fetchNotes() async {
     try {
       final res = await http.get(
-      Uri.parse('http://$_host:8000/api/notes/all/${UserSession.userId}'),
+      // Uri.parse('http://$_host:8000/api/notes/all/${UserSession.userId}'),
+      Uri.parse('https://$_host/api/notes/all/${UserSession.userId}'),
       );
 
       final data = jsonDecode(res.body);
@@ -59,7 +60,8 @@ class _BrowseNotesState extends State<BrowseNotes> {
 
     try {
       final res = await http.get(
-        Uri.parse('http://$_host:8000/api/notes/saved/$uid'),
+        // Uri.parse('http://$_host:8000/api/notes/saved/$uid'),
+        Uri.parse('https://$_host/api/notes/saved/$uid'),
       );
 
       final data = jsonDecode(res.body);
@@ -84,7 +86,8 @@ class _BrowseNotesState extends State<BrowseNotes> {
     try {
       if (wasSaved) {
         await http.post(
-          Uri.parse('http://$_host:8000/api/notes/unsave'),
+          // Uri.parse('http://$_host:8000/api/notes/unsave'),
+          Uri.parse('https://$_host/api/notes/unsave'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'user_id': uid,
@@ -94,7 +97,8 @@ class _BrowseNotesState extends State<BrowseNotes> {
         setState(() => _saved.remove(id));
       } else {
         await http.post(
-          Uri.parse('http://$_host:8000/api/notes/save'),
+          // Uri.parse('http://$_host:8000/api/notes/save'),
+          Uri.parse('https://$_host/api/notes/save'),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'user_id': uid,

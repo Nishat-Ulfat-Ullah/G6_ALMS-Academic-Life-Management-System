@@ -31,7 +31,8 @@ class _MyConsultationsState extends State<MyConsultations> {
 
   Future<void> _fetchData() async {
     try {
-      final roleResponse = await http.get(Uri.parse('http://$_host:8000/role/${widget.userId}'));
+      // final roleResponse = await http.get(Uri.parse('http://$_host:8000/role/${widget.userId}'));
+      final roleResponse = await http.get(Uri.parse('https://$_host/role/${widget.userId}'));
       if (roleResponse.statusCode == 200) {
         final roleData = jsonDecode(roleResponse.body);
         if (roleData['success'] == true) {
@@ -39,7 +40,8 @@ class _MyConsultationsState extends State<MyConsultations> {
         }
       }
 
-      final consResponse = await http.get(Uri.parse('http://$_host:8000/my_consultations/${widget.userId}?role=$userRole'));
+      // final consResponse = await http.get(Uri.parse('http://$_host:8000/my_consultations/${widget.userId}?role=$userRole'));
+      final consResponse = await http.get(Uri.parse('https://$_host/my_consultations/${widget.userId}?role=$userRole'));
       if (consResponse.statusCode == 200) {
         final consData = jsonDecode(consResponse.body);
         if (consData['success'] == true) {
@@ -64,7 +66,8 @@ class _MyConsultationsState extends State<MyConsultations> {
   Future<void> _updateStatus(int bookingId, String newStatus, [String? summaryText]) async {
     try {
       final response = await http.post(
-        Uri.parse('http://$_host:8000/update_consultation_status'),
+        // Uri.parse('http://$_host:8000/update_consultation_status'),
+        Uri.parse('https://$_host/update_consultation_status'),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "booking_id": bookingId,

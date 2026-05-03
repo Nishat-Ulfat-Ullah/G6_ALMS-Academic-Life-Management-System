@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 
 class CourseOutlineService {
   // final String baseUrl = Platform.isAndroid ? "http://10.0.2.2:8000" : "http://localhost:8000";
-  final String baseUrl = "http://g6-alms-academic-life-management-system.onrender.com:8000";
+  final String baseUrl = "http://g6-alms-academic-life-management-system.onrender.com";
 
   Future<bool> updateCourse(Map<String, dynamic> courseData) async {
     try {

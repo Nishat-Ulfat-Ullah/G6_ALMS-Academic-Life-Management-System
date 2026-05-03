@@ -46,7 +46,8 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
   Future<void> _loadSavedInterests() async {
     try {
       final res = await http.get(
-        Uri.parse("http://$_host:8000/api/interests/${UserSession.userId}"),
+        // Uri.parse("http://$_host:8000/api/interests/${UserSession.userId}"),
+        Uri.parse("https://$_host/api/interests/${UserSession.userId}"),
       );
       final data = jsonDecode(res.body);
       if (data["success"] == true) {
@@ -62,7 +63,8 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
   Future<void> _loadAvailableInterests() async {
     try {
       final res = await http.get(
-        Uri.parse("http://$_host:8000/api/interests/options"),
+        // Uri.parse("http://$_host:8000/api/interests/options"),
+        Uri.parse("https://$_host/api/interests/options"),
       );
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -81,7 +83,8 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
     setState(() => _loading = true);
     try {
       final res = await http.get(
-        Uri.parse("http://$_host:8000/api/generate_thesis/${UserSession.userId}"),
+        // Uri.parse("http://$_host:8000/api/generate_thesis/${UserSession.userId}"),
+        Uri.parse("https://$_host/api/generate_thesis/${UserSession.userId}"),
       );
       final data = jsonDecode(res.body);
       if (data["success"] == true) {
@@ -186,7 +189,8 @@ class _ThesisRecommenderPageState extends State<ThesisRecommenderPage> {
                 onPressed: () async {
                   Navigator.pop(context);
                   final res = await http.post(
-                    Uri.parse("http://$_host:8000/api/interests/update"),
+                    // Uri.parse("http://$_host:8000/api/interests/update"),
+                    Uri.parse("https://$_host/api/interests/update"),
                     headers: {"Content-Type": "application/json"},
                     body: jsonEncode({
                       "user_id": UserSession.userId.toString(),
